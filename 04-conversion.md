@@ -4,7 +4,7 @@
 
 Distillation only separates what is already in the crude. Conversion units **change the molecules**: they crack heavy ones into lighter, more valuable ones, or reshape light ones into high-octane gasoline components.
 
-![FCC riser-regenerator loop](../assets/fig03_fcc_loop.png)
+![FCC riser-regenerator loop](fig03_fcc_loop.png)
 
 ## Unit by unit
 

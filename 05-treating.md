@@ -4,7 +4,7 @@
 
 Finished products must be cleaned of sulfur, nitrogen, metals, acids and gums. **Sulfur matters most**, because gasoline and diesel must reach about 10 ppm. The sulfur that is removed does not disappear: it travels as H₂S to the amine unit and leaves the refinery as solid or molten sulfur.
 
-![Sulfur path through the refinery](../assets/fig04_sulfur_loop.png)
+![Sulfur path through the refinery](fig04_sulfur_loop.png)
 
 ## Hydrotreating
 

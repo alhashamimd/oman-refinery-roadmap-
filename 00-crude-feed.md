@@ -1,10 +1,10 @@
-[← Roadmap](../README.md) · **Stage 0: Crude feed** · [Next: Desalting →](01-desalting.md)
+[← Roadmap](README.md) · **Stage 0: Crude feed** · [Next: Desalting →](01-desalting.md)
 
 # Stage 0: Crude feed (the raw material)
 
 The refinery receives crude oil that has already been stabilised and pretreated upstream. Before it enters any unit, the crude is sampled and tested against the purchase contract. The results decide the price, the processing route and how hard each unit has to work.
 
-![Oman crude feed specification](../assets/fig06_crude_feed_spec.png)
+![Oman crude feed specification](fig06_crude_feed_spec.png)
 
 ## Oman crude: the reference feed
 
@@ -25,7 +25,7 @@ Source: TotalEnergies "Crude OMAN TBP" data sheet (assay dated 2016, for informa
 
 ## What one barrel contains
 
-![One barrel of Oman crude by boiling range](../assets/fig05_oman_crude_barrel.png)
+![One barrel of Oman crude by boiling range](fig05_oman_crude_barrel.png)
 
 | Cut | Boiling range | Yield, wt% | Sulfur, wt% | Density, kg/m³ |
 |---|---|---|---|---|

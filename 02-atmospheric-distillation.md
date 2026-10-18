@@ -4,7 +4,7 @@
 
 The crude distillation unit splits the crude into fractions by boiling range. It is a separation step: no chemical reaction happens here.
 
-![Atmospheric column with Oman crude cut yields](../assets/fig02_atmospheric_column.png)
+![Atmospheric column with Oman crude cut yields](fig02_atmospheric_column.png)
 
 ## How it works
 

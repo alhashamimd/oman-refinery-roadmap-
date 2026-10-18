@@ -1,4 +1,4 @@
-[← Previous: Refineries in Oman](08-oman-refineries.md) · **Sources and glossary** · [Back to the roadmap ↑](../README.md)
+[← Previous: Refineries in Oman](08-oman-refineries.md) · **Sources and glossary** · [Back to the roadmap ↑](README.md)
 
 # Sources and glossary
 

@@ -4,9 +4,9 @@
 
 Oman has three refineries with a combined nameplate capacity of about **534,000 barrels per day**. OQ operates Mina Al Fahal and Sohar, and co-owns Duqm with Kuwait Petroleum International.
 
-![Oman refinery capacity](../assets/fig08_oman_refinery_capacity.png)
+![Oman refinery capacity](fig08_oman_refinery_capacity.png)
 
-![Oman refinery profiles](../assets/fig09_oman_refineries.png)
+![Oman refinery profiles](fig09_oman_refineries.png)
 
 ## Comparison
 

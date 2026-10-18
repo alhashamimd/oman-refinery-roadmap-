@@ -4,7 +4,7 @@
 
 Blending is the last stage. Streams from many units are combined in calculated ratios, additives are injected, and the laboratory releases each batch only when it meets its specification.
 
-![Finished product specifications](../assets/fig07_product_specs.png)
+![Finished product specifications](fig07_product_specs.png)
 
 ## What goes into each product
 
