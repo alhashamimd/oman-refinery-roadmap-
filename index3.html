@@ -1,0 +1,951 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Oman Refinery Roadmap</title>
+<meta name="description" content="Interactive canvas: how a refinery works from crude tank to finished product, refining economics, and Oman's three refineries.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a zoomable drawing board. Hub in the centre; eight branches run as a process loop (01-04 across the top, 05-08 back along the bottom); satellites left and right. A camera flies between them; a pill rail drives it. */
+:root {
+  color-scheme: light;
+  --paper: #f5f8fb; --paper-2: #e6eef6; --sheet: #ffffff;
+  --ink: #0b1726; --ink-2: #2c3e52; --ink-3: #56687c;
+  --rule: #cdd9e5; --rule-soft: #e4ecf3; --grid: rgba(29, 78, 160, 0.07);
+  --line: #1d4f9f; --hot: #e2570f; --hot-soft: #fff0e6;
+  --h2: #04875f; --h2-soft: #dcf5ea; --sulfur: #a86b00; --sulfur-soft: #fff4d6;
+  --blue: #1f6fe0; --blue-soft: #e3eefd; --figmat: #ffffff; --bar: #1f6fe0;
+  --seq1: #9cc3f5; --seq2: #78acf0; --seq3: #5495ea; --seq4: #3580e3; --seq5: #1f6fe0; --seq6: #1a5cc0; --seq7: #134a9e;
+  --land: #eef2f6; --land-ink: #c3cfdb; --oman: #dbe9fb; --sea: #f3f8fd;
+  --rail: rgba(255, 255, 255, 0.95); --rail-ink: #2c3e52;
+  --console: #0b1726; --console-ink: #ffffff; --console-ink-2: #b9c7d6;
+  --shadow: 0 14px 40px -18px rgba(18, 52, 96, 0.22), 0 0 0 1px rgba(18, 52, 96, 0.04);
+  --ring: rgba(226, 87, 15, 0.12);
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0, 1);
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+img { max-width: 100%; }
+h1, h2, h3 { margin: 0; font-family: var(--f-display); text-wrap: balance; }
+p { margin: 0; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--hot); outline-offset: 3px; border-radius: 4px; }
+
+.viewport { position: fixed; inset: 0; overflow: hidden; background-color: var(--paper);
+  background-image: radial-gradient(ellipse at 50% 45%, #ffffff 0%, var(--paper) 60%, var(--paper-2) 100%); }
+.stage { position: absolute; left: 0; top: 0; width: 6000px; height: 3300px; transform-origin: 0 0; transition: transform 1100ms var(--ease);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px); background-size: 40px 40px; }
+@media (prefers-reduced-motion: reduce) { .stage { transition: none; } }
+svg.conns { position: absolute; left: 0; top: 0; width: 6000px; height: 3300px; overflow: visible; pointer-events: none; }
+.conns .pipe { fill: none; stroke: var(--line); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.conns .spoke { fill: none; stroke: var(--hot); stroke-width: 3; stroke-dasharray: 10 12; opacity: .55; }
+.conns .flow { fill: none; stroke: var(--hot); stroke-width: 8; stroke-dasharray: 18 40; stroke-linecap: round; animation: flow 2.4s linear infinite; opacity: .85; }
+@keyframes flow { to { stroke-dashoffset: -58; } }
+@media (prefers-reduced-motion: reduce) { .conns .flow { animation: none; } }
+.conns text { fill: var(--ink-3); font-family: var(--f-mono); font-size: 26px; letter-spacing: .08em; }
+.conns marker path { fill: var(--line); }
+
+.panel { position: absolute; background: var(--sheet); border: 2px solid #c2d1df; border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
+  display: flex; flex-direction: column; font-size: 20px; line-height: 1.5; color: var(--ink); cursor: pointer;
+  transition: box-shadow 420ms var(--ease), border-color 420ms var(--ease); }
+.panel.focused { border-color: var(--hot); cursor: default; box-shadow: 0 0 0 12px var(--ring), 0 30px 80px -24px rgba(19, 32, 45, 0.4); }
+.panel .go { position: absolute; right: 26px; bottom: 22px; font-family: var(--f-mono); font-size: 18px; color: var(--hot); border: 2px solid var(--hot); border-radius: 999px; padding: 6px 16px; background: var(--sheet); transition: opacity 300ms; }
+.panel.focused .go { opacity: 0; pointer-events: none; }
+
+.branch { padding: 44px 52px 48px; gap: 24px; }
+.bhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 30px; align-items: end; border-bottom: 3px solid var(--line); padding-bottom: 18px; }
+.bnum { font-family: var(--f-display); font-weight: 900; font-stretch: 62%; font-size: 138px; line-height: .78; color: var(--hot); font-variant-numeric: tabular-nums; }
+.eyebrow { font-family: var(--f-mono); font-size: 16px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.bhead h2 { font-size: 66px; line-height: .95; font-weight: 800; font-stretch: 74%; text-transform: uppercase; margin-top: 6px; }
+.bhead p.lede { grid-column: 1 / -1; font-size: 22px; color: var(--ink-2); max-width: 1120px; }
+.bbody { display: grid; gap: 20px; flex: 1; min-height: 0; }
+.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.c64 { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+.c55 { grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr); }
+
+.card { background: var(--sheet); border: 1.5px solid var(--rule); border-radius: 10px; padding: 18px 20px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.card.t-hot { border-top: 5px solid var(--hot); } .card.t-line { border-top: 5px solid var(--line); } .card.t-h2 { border-top: 5px solid var(--h2); }
+.card.t-s { border-top: 5px solid var(--sulfur); } .card.t-blue { border-top: 5px solid var(--blue); }
+.card h3 { font-size: 25px; font-weight: 750; font-stretch: 85%; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.tag { font-family: var(--f-mono); font-size: 13px; font-weight: 600; color: var(--ink-3); border: 1.5px solid var(--rule); border-radius: 4px; padding: 1px 7px; letter-spacing: .05em; }
+.card ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 18.5px; color: var(--ink-2); }
+.card ul b { color: var(--ink); }
+.card p { font-size: 18px; color: var(--ink-2); }
+.k { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 18.5px; }
+.k dt { font-family: var(--f-mono); font-size: 13.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
+.k dd { margin: 0; }
+.io { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; margin-top: auto; }
+.io > div { background: var(--paper); border: 1.5px solid var(--rule-soft); border-radius: 6px; padding: 9px 12px; font-size: 16px; line-height: 1.35; min-width: 0; }
+.io > div.out { border-color: var(--line); }
+.io .l { display: block; font-family: var(--f-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+.io .arr { display: flex; align-items: center; color: var(--hot); font: 700 26px/1 var(--f-mono); background: none; border: 0; padding: 0; }
+.btn { appearance: none; font: 600 17px/1 var(--f-body); color: var(--line); background: var(--sheet); border: 2px solid var(--line); border-radius: 999px; padding: 11px 18px; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.btn:hover { background: var(--line); color: var(--sheet); }
+.btn.sm { font-size: 14px; padding: 7px 12px; border-width: 1.5px; }
+.btn.on { background: var(--line); color: var(--sheet); }
+
+table { border-collapse: collapse; width: 100%; font-size: 17.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1.5px solid var(--rule-soft); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); background: var(--paper); font-weight: 600; }
+td:first-child { font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+.tw { border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--sheet); }
+
+.chart { display: grid; gap: 10px; }
+.crow { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; align-items: center; }
+.crow .nm { text-align: right; font-size: 17px; line-height: 1.15; }
+.crow .nm small { display: block; font-family: var(--f-mono); font-size: 13px; color: var(--ink-3); }
+.crow .tr { position: relative; height: 38px; border-left: 2px solid var(--ink-3); }
+.crow .bar { height: 100%; border-radius: 0 6px 6px 0; min-width: 4px; }
+.crow .bar:hover, .crow .bar:focus-visible { filter: brightness(1.12) saturate(1.1); }
+.crow .v { position: absolute; top: 50%; transform: translateY(-50%); padding-left: 10px; font: 600 16px/1 var(--f-mono); white-space: nowrap; pointer-events: none; }
+.axis { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; }
+.axis .ticks { position: relative; height: 20px; font: 13px/1 var(--f-mono); color: var(--ink-3); }
+.axis .ticks span { position: absolute; transform: translateX(-50%); }
+.note { font-size: 14.5px; color: var(--ink-3); }
+.tip { position: fixed; z-index: 90; pointer-events: none; max-width: 280px; background: var(--console); color: var(--console-ink); border-radius: 6px; padding: 10px 12px; font-size: 13.5px; line-height: 1.4; box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); }
+.tip b { display: block; font-family: var(--f-display); font-stretch: 85%; font-size: 16px; margin-bottom: 3px; }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; font-family: var(--f-mono); font-size: 12px; color: var(--console-ink-2); }
+.tip .r span:last-child { color: var(--console-ink); }
+
+.fig { margin: 0; padding: 0; border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--figmat); cursor: zoom-in; display: flex; flex-direction: column; text-align: left; font: inherit; color: inherit; min-width: 0; }
+.fig img { display: block; width: 100%; height: auto; }
+.fig .cap { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 9px 14px; background: var(--sheet); border-top: 1.5px solid var(--rule); font-size: 15px; color: var(--ink-2); width: 100%; }
+.fig .cap b { color: var(--ink); }
+.fig .cap .o { font: 600 13px/1 var(--f-mono); color: var(--blue); white-space: nowrap; }
+
+/* hub */
+.hub { border: 3px solid var(--line); padding: 30px 56px; gap: 16px; cursor: default; justify-content: center;
+  background: linear-gradient(180deg, var(--hot-soft) 0%, #ffffff 55%, var(--blue-soft) 100%); }
+.hub .tb { display: flex; flex-wrap: wrap; gap: 6px 26px; font: 500 15px/1.3 var(--f-mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; }
+.hub .tb b { color: var(--ink); font-weight: 600; }
+.hub h1 { font-size: 104px; line-height: .86; font-weight: 850; font-stretch: 68%; text-transform: uppercase; letter-spacing: -.005em; }
+.hub h1 em { font-style: normal; color: var(--hot); }
+.hub .lede { font-size: 22px; color: var(--ink-2); max-width: 1180px; }
+.hub .stats { display: flex; gap: 36px; flex-wrap: wrap; }
+.hub .st { border-left: 5px solid var(--line); padding-left: 16px; }
+.hub .st .n { font: 800 42px/1 var(--f-display); font-stretch: 78%; font-variant-numeric: tabular-nums; }
+.hub .st .l { font-size: 15.5px; color: var(--ink-2); max-width: 270px; }
+
+/* satellites */
+.sat { padding: 30px 34px; gap: 16px; font-size: 17px; }
+.sat h3 { font-size: 30px; font-weight: 800; font-stretch: 78%; text-transform: uppercase; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.sat h3 .eyebrow { font-size: 14px; }
+.figgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.figgrid .fig .cap { display: none; }
+.figgrid .fig img { aspect-ratio: 16 / 7.5; object-fit: contain; object-position: center; background: #ffffff; padding: 4px; }
+.srcs { margin: 0; padding-left: 22px; font-size: 15px; line-height: 1.55; color: var(--ink-2); columns: 2; column-gap: 32px; }
+.srcs a { color: var(--blue); }
+.keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; font-size: 16px; color: var(--ink-2); }
+kbd { font: 600 14px/1 var(--f-mono); border: 1.5px solid var(--ink-3); border-bottom-width: 3px; border-radius: 5px; padding: 3px 7px; color: var(--ink); background: var(--paper); }
+svg.strip { width: 100%; height: auto; display: block; }
+.strip .pp { stroke: var(--line); stroke-width: 2.4; fill: none; }
+.strip .pp.h2 { stroke: var(--h2); stroke-dasharray: 6 4; stroke-width: 1.8; }
+.strip .pp.s { stroke: var(--sulfur); stroke-dasharray: 2 4; stroke-width: 2; }
+.strip .node { cursor: pointer; }
+.strip .node rect { fill: var(--sheet); stroke: var(--line); stroke-width: 1.8; transition: stroke-width .15s; }
+.strip .node.hot rect { fill: var(--hot-soft); stroke: var(--hot); }
+.strip .node.h2n rect { fill: var(--h2-soft); stroke: var(--h2); }
+.strip .node.sn rect { fill: var(--sulfur-soft); stroke: var(--sulfur); }
+.strip .node.prod rect { fill: var(--blue-soft); stroke: var(--blue); }
+.strip .node text { fill: var(--ink); font: 600 12.5px var(--f-body); text-anchor: middle; pointer-events: none; }
+.strip .node text.tg { font: 500 10px var(--f-mono); fill: var(--ink-3); }
+.strip .node:hover rect, .strip .node.on rect { stroke-width: 3; }
+.strip .node:focus { outline: none; }
+.strip .node:focus-visible rect { stroke: var(--hot); stroke-width: 3.4; }
+.strip .lb { fill: var(--ink-3); font: 10px var(--f-mono); }
+.strip marker path { fill: var(--line); }
+.readout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; background: var(--paper); border: 1.5px dashed var(--rule); border-radius: 8px; padding: 10px 14px; min-height: 74px; }
+.readout .tgb { font: 600 14px/1 var(--f-mono); border: 2px solid var(--line); border-radius: 4px; padding: 5px 8px; white-space: nowrap; }
+.readout p { font-size: 15.5px; color: var(--ink-2); }
+.readout p b { color: var(--ink); }
+
+.big { font: 850 48px/1 var(--f-display); font-stretch: 72%; font-variant-numeric: tabular-nums; }
+.big small { font: 500 15px/1 var(--f-mono); color: var(--ink-3); margin-left: 6px; }
+.pill2 { display: inline-block; font: 600 12px/1 var(--f-mono); padding: 4px 9px; border-radius: 999px; border: 1.5px solid currentColor; text-transform: uppercase; letter-spacing: .06em; }
+.pill2.v { color: var(--h2); } .pill2.g { color: var(--sulfur); } .pill2.t { color: var(--ink-3); }
+.tl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); border-top: 3px solid var(--line); }
+.tl li { position: relative; padding: 14px 14px 0 0; min-width: 0; }
+.tl li::before { content: ""; position: absolute; top: -10px; left: 0; width: 16px; height: 16px; border-radius: 50%; background: var(--sheet); border: 4px solid var(--hot); }
+.tl .y { font: 850 28px/1 var(--f-display); font-stretch: 72%; display: block; margin-bottom: 3px; }
+.tl p { font-size: 14.5px; line-height: 1.35; color: var(--ink-2); }
+.tl6 .y { font-size: 25px; }
+.tl6 p { font-size: 13.5px; }
+.tl6 li { padding-right: 10px; }
+
+/* 01 refinery types ladder */
+.ladder { display: grid; gap: 10px; }
+.rung { display: grid; grid-template-columns: 54px minmax(0, 1fr); gap: 14px; align-items: center; background: var(--paper); border: 1.5px solid var(--rule-soft); border-radius: 10px; padding: 12px 14px; }
+.rung .lv { font: 850 34px/1 var(--f-display); font-stretch: 70%; color: var(--sheet); background: var(--line); border-radius: 8px; height: 54px; display: grid; place-items: center; }
+.rung:nth-child(2) .lv { background: var(--blue); } .rung:nth-child(3) .lv { background: var(--hot); } .rung:nth-child(4) .lv { background: #b8400a; }
+.rung b { font-size: 19px; display: block; }
+.rung span { font-size: 16px; color: var(--ink-2); line-height: 1.35; display: block; }
+.trio { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.trio div { border-radius: 10px; padding: 12px 14px; font-size: 16px; color: var(--ink-2); line-height: 1.35; }
+.trio b { display: block; font: 800 24px/1.1 var(--f-display); font-stretch: 78%; text-transform: uppercase; color: var(--ink); margin-bottom: 4px; }
+.trio .a { background: var(--blue-soft); } .trio .b { background: var(--hot-soft); } .trio .c { background: var(--sulfur-soft); }
+.gstat { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gstat div { border-left: 5px solid var(--line); padding: 4px 0 4px 14px; }
+.gstat .n { font: 850 40px/1 var(--f-display); font-stretch: 74%; font-variant-numeric: tabular-nums; }
+.gstat .l { font-size: 15.5px; color: var(--ink-2); line-height: 1.35; }
+
+/* 07 calculators */
+.calc table { font-size: 15.5px; }
+.calc td, .calc th { padding: 3px 10px; }
+.calc input[type=number] { width: 80px; font: 600 15px/1 var(--f-mono); padding: 3px 8px; border: 1.5px solid var(--rule); border-radius: 6px; background: var(--paper); color: var(--ink); text-align: right; }
+.calc input[type=number]:focus { border-color: var(--hot); outline: none; background: #fff; }
+.calc td.num { text-align: right; font-family: var(--f-mono); }
+.presets { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.presets .eyebrow { margin-right: 4px; font-size: 13px; }
+.gauge { position: relative; height: 58px; margin-top: 4px; }
+.gauge .trk { position: absolute; left: 0; right: 0; top: 22px; height: 14px; border-radius: 999px; background: linear-gradient(90deg, var(--blue-soft), var(--seq3) 45%, var(--hot) 100%); }
+.gauge .mk { position: absolute; top: 14px; width: 2px; height: 30px; background: var(--ink-2); }
+.gauge .mk span { position: absolute; top: 32px; left: 50%; transform: translateX(-50%); font: 600 12px/1.1 var(--f-mono); color: var(--ink-2); white-space: nowrap; text-align: center; }
+.gauge .ptr { position: absolute; top: 0; width: 0; height: 0; border-left: 11px solid transparent; border-right: 11px solid transparent; border-top: 18px solid var(--ink); transform: translateX(-50%); transition: left 450ms var(--ease); }
+.nci { display: flex; align-items: baseline; gap: 12px; }
+.nci .big { font-size: 52px; color: var(--hot); }
+.spread { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.spread label { display: grid; gap: 4px; font: 600 13px/1.2 var(--f-mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; }
+.spread input { width: 100%; }
+.formula { font: 600 17px/1.5 var(--f-mono); background: var(--paper); border: 1.5px dashed var(--rule); border-radius: 8px; padding: 10px 14px; color: var(--ink); }
+.out3 { display: flex; align-items: baseline; gap: 10px; }
+.out3 .big { color: var(--h2); font-size: 52px; }
+
+/* 08 Oman */
+.omap { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.omap .nb { fill: var(--land); stroke: var(--land-ink); stroke-width: 1.2; }
+.omap .om { fill: var(--oman); stroke: var(--line); stroke-width: 2; }
+.omap .pl { fill: none; stroke: var(--hot); stroke-width: 5; stroke-linecap: round; stroke-dasharray: 12 8; }
+.omap .pin { fill: var(--hot); stroke: #fff; stroke-width: 4; }
+.omap .pin.d { fill: var(--line); }
+.omap text { font-family: var(--f-body); fill: var(--ink); }
+.omap .lbl { font-size: 36px; font-weight: 800; paint-order: stroke; stroke: #ffffff; stroke-width: 7px; stroke-linejoin: round; }
+.omap .sub { font-size: 25px; fill: var(--ink-2); font-family: var(--f-mono); paint-order: stroke; stroke: #ffffff; stroke-width: 6px; stroke-linejoin: round; }
+.omap .ctry { font-size: 22px; fill: var(--ink-3); font-family: var(--f-mono); letter-spacing: .08em; }
+.omap .sea { font-size: 24px; fill: #5b82b3; font-style: italic; letter-spacing: .06em; }
+.mapbox { background: var(--sea); border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; min-height: 0; min-width: 0; position: relative; }
+.otiles { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.otile { background: var(--paper); border-radius: 10px; padding: 10px 14px; border: 1.5px solid var(--rule-soft); }
+.otile .n { font: 850 38px/1 var(--f-display); font-stretch: 72%; font-variant-numeric: tabular-nums; }
+.otile .l { font-size: 14.5px; color: var(--ink-2); line-height: 1.3; }
+.rrow { display: grid; grid-template-columns: 150px minmax(0, 1fr) 90px; gap: 12px; align-items: center; font-size: 16px; }
+.rrow b { font-size: 17px; }
+.rrow .t { height: 22px; border-left: 2px solid var(--ink-3); }
+.rrow .t div { height: 100%; background: var(--bar); border-radius: 0 5px 5px 0; }
+.rrow .t div.d { background: var(--line); }
+.rrow .c { font: 700 16px/1 var(--f-mono); text-align: right; }
+.rrow small { display: block; font: 12.5px/1.2 var(--f-mono); color: var(--ink-3); }
+
+/* rail */
+.rail { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 60;
+  display: flex; align-items: center; gap: 3px; background: var(--rail); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--rule); border-radius: 999px; padding: 6px; box-shadow: 0 10px 30px -14px rgba(0,0,0,.35); max-width: calc(100vw - 24px); overflow-x: auto; scrollbar-width: none; }
+.rail::-webkit-scrollbar { display: none; }
+.rail button { appearance: none; border: 1.5px solid transparent; background: transparent; border-radius: 999px; padding: 8px 11px; font: 700 11px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--rail-ink); cursor: pointer; white-space: nowrap; transition: all 250ms var(--ease); }
+.rail button:hover { color: var(--hot); border-color: var(--hot); }
+.rail button.on { background: var(--hot); color: #fff; }
+.rail .sep { width: 1px; align-self: stretch; background: var(--rule); margin: 4px 2px; }
+.rail .nav { font-size: 15px; letter-spacing: 0; padding: 7px 11px; }
+.hint { position: fixed; right: max(18px, env(safe-area-inset-right, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); z-index: 60; font: 500 12px/1.4 var(--f-mono); color: var(--ink-3); background: var(--rail); border: 1px solid var(--rule); border-radius: 8px; padding: 7px 10px; }
+.hint kbd { font-size: 11px; padding: 1px 5px; border-bottom-width: 2px; }
+.brandmark { position: fixed; left: max(18px, env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); z-index: 60; font: 850 18px/1 var(--f-display); font-stretch: 70%; text-transform: uppercase; letter-spacing: .03em; color: var(--ink); background: var(--rail); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; }
+.brandmark span { color: var(--hot); }
+@media (max-width: 1100px) { .hint { display: none; } }
+
+/* lightbox */
+.lbx { position: fixed; inset: 0; z-index: 95; background: rgba(8, 14, 20, 0.88); display: grid; grid-template-rows: auto minmax(0, 1fr);
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+.lbx-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #e6edf3; padding-bottom: 10px; flex-wrap: wrap; }
+.lbx-bar b { font: 700 18px/1.2 var(--f-display); font-stretch: 80%; }
+.lbx-bar .ctr { display: flex; gap: 6px; }
+.lbx-bar button { font: 600 13px/1 var(--f-mono); color: #e6edf3; background: #1d2c3a; border: 1px solid #3a4f63; border-radius: 5px; padding: 8px 11px; cursor: pointer; }
+.lbx-bar button:hover { background: #2a4057; }
+.lbx-st { overflow: auto; display: flex; align-items: center; justify-content: center; min-height: 0; }
+.lbx-st img { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 96px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); object-fit: contain; background: #ffffff; border-radius: 6px; box-shadow: 0 20px 60px -20px rgba(0,0,0,.6); }
+.lbx-st.zoom { align-items: flex-start; justify-content: flex-start; }
+.lbx-st.zoom img { max-width: none; max-height: none; width: 1800px; }
+
+/* flow mode: phones and short screens scroll instead of flying */
+body.flow { overflow: auto; }
+body.flow .viewport { position: static; overflow: visible; background: var(--paper); }
+body.flow .stage { position: static; width: auto; height: auto; transform: none !important; transition: none; display: flex; flex-direction: column; gap: 18px;
+  padding: calc(64px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(110px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background-size: 24px 24px; }
+body.flow svg.conns, body.flow .panel .go, body.flow .hint { display: none; }
+body.flow .panel { position: static !important; width: auto !important; height: auto !important; cursor: default; font-size: 16px; }
+body.flow .panel.focused { box-shadow: var(--shadow); border-color: #c2d1df; }
+body.flow .branch { padding: 22px 18px; gap: 18px; }
+body.flow .bhead { grid-template-columns: auto minmax(0, 1fr); }
+body.flow .bhead .btn { grid-column: 1 / -1; justify-self: start; }
+body.flow .bnum { font-size: 64px; }
+body.flow .bhead h2 { font-size: 32px; }
+body.flow .bhead p.lede { font-size: 16px; }
+body.flow .c2, body.flow .c3, body.flow .c4, body.flow .c64, body.flow .c55, body.flow .trio, body.flow .gstat, body.flow .spread { grid-template-columns: minmax(0, 1fr); }
+body.flow .hub { padding: 24px 18px; }
+body.flow .hub h1 { font-size: 48px; }
+body.flow .hub .lede { font-size: 16px; }
+body.flow .hub .st .n { font-size: 30px; }
+body.flow .sat { padding: 20px 18px; }
+body.flow .sat h3 { font-size: 22px; }
+body.flow .figgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body.flow .srcs { columns: 1; }
+body.flow .keys { grid-template-columns: minmax(0, 1fr); }
+body.flow .crow, body.flow .axis { grid-template-columns: 110px minmax(0, 1fr); gap: 10px; }
+body.flow .crow .nm { font-size: 13px; }
+body.flow .tl { grid-template-columns: minmax(0, 1fr); border-top: 0; border-left: 3px solid var(--line); }
+body.flow .tl li { padding: 0 0 14px 18px; }
+body.flow .tl li::before { top: 4px; left: -10px; }
+body.flow .tw { overflow-x: auto; }
+body.flow table { min-width: 520px; font-size: 14px; }
+body.flow .card ul, body.flow .card p, body.flow .k { font-size: 15px; }
+body.flow .io { grid-template-columns: minmax(0, 1fr); }
+body.flow .io .arr { justify-content: center; transform: rotate(90deg); }
+body.flow .strip-wrap { overflow-x: auto; }
+body.flow svg.strip { min-width: 760px; }
+body.flow .mapbox { height: 420px; grid-row: auto !important; }
+body.flow .tl6 { grid-column: auto !important; }
+body.flow .rrow { grid-template-columns: 110px minmax(0, 1fr) 70px; font-size: 14px; }
+body.flow .rail { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+</style>
+</head>
+<body>
+
+<span class="brandmark" aria-hidden="true">Refinery <span>Roadmap</span></span>
+<div class="hint" aria-hidden="true"><kbd>1</kbd>–<kbd>8</kbd> branches · <kbd>←</kbd><kbd>→</kbd> step · <kbd>0</kbd> hub · <kbd>L</kbd> line · <kbd>F</kbd> figures · <kbd>Esc</kbd> back</div>
+
+<div class="viewport" id="viewport">
+  <div class="stage" id="stage">
+
+    <svg class="conns" viewBox="0 0 6000 3300" aria-hidden="true">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <path class="pipe" d="M1500,720 H1640" marker-end="url(#m)"/>
+      <path class="pipe" d="M2950,720 H3090" marker-end="url(#m)"/>
+      <path class="pipe" d="M4400,720 H4540" marker-end="url(#m)"/>
+      <path class="pipe" d="M5850,900 H5950 V2560 H5860" marker-end="url(#m)"/>
+      <path class="pipe" d="M4550,2600 H4410" marker-end="url(#m)"/>
+      <path class="pipe" d="M3100,2600 H2960" marker-end="url(#m)"/>
+      <path class="pipe" d="M1650,2600 H1510" marker-end="url(#m)"/>
+      <path class="flow" d="M1500,720 H1640"/><path class="flow" d="M2950,720 H3090"/><path class="flow" d="M4400,720 H4540"/>
+      <path class="flow" d="M5850,900 H5950 V2560 H5860"/>
+      <path class="flow" d="M4550,2600 H4410"/><path class="flow" d="M3100,2600 H2960"/><path class="flow" d="M1650,2600 H1510"/>
+      <path class="spoke" d="M2300,1630 H1540"/>
+      <path class="spoke" d="M3700,1630 H4460"/>
+      <text x="5985" y="1730" transform="rotate(90 5985 1730)" text-anchor="middle">PROCESS FLOW</text>
+    </svg>
+
+    <!-- HUB -->
+    <section class="panel hub" id="hub" data-v="hub" style="left:2300px;top:1380px;width:1400px;height:500px" aria-labelledby="h-hub">
+      <div class="tb"><span>Drawing <b>ORR-001 · Rev B</b></span><span>Prepared by <b>Mohamed Al-Hashami</b></span><span><b>Oct 2026</b> · Training</span></div>
+      <h1 id="h-hub">Oman Refinery <em>Roadmap</em></h1>
+      <p class="lede">Eight stops around one loop: what a refinery is, how crude becomes fuel stage by stage, what makes it profitable, and how Oman's three refineries fit together.</p>
+      <div class="stats">
+        <div class="st"><div class="n">103.5 mb/d</div><div class="l">world refining capacity (2023, EIA)</div></div>
+        <div class="st"><div class="n">534,000 b/d</div><div class="l">refining capacity in Oman</div></div>
+        <div class="st"><div class="n">1.0 mb/d</div><div class="l">Oman crude output, 2025 average</div></div>
+      </div>
+    </section>
+
+    <!-- 01 REFINERY 101 -->
+    <section class="panel branch" id="b01" data-v="01" style="left:200px;top:260px;width:1300px;height:900px" aria-labelledby="h01">
+      <div class="bhead">
+        <div class="bnum">01</div>
+        <div><span class="eyebrow">Start here · The big picture</span><h2 id="h01">Refinery 101</h2></div>
+        <button class="btn" data-fig="fig01" type="button">Full flow diagram ↗</button>
+        <p class="lede">A refinery is a chain of separation, conversion and treating units. How far down that chain it goes decides what it can make from a barrel, and how much it earns.</p>
+      </div>
+      <div class="bbody c55">
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+          <div class="trio">
+            <div class="a"><b>Separate</b>Split crude by boiling point. No chemistry.</div>
+            <div class="b"><b>Convert</b>Crack and reshape molecules into lighter fuels.</div>
+            <div class="c"><b>Treat</b>Remove sulfur, nitrogen and metals to spec.</div>
+          </div>
+          <div class="ladder">
+            <div class="rung"><span class="lv">1</span><div><b>Topping</b><span>Distillation only. Sells whatever the crude contains, including a lot of fuel oil.</span></div></div>
+            <div class="rung"><span class="lv">2</span><div><b>Hydroskimming</b><span>Adds a reformer and hydrotreaters for octane and low sulfur. Residue still sold as fuel oil.</span></div></div>
+            <div class="rung"><span class="lv">3</span><div><b>Cracking (conversion)</b><span>Adds FCC or a hydrocracker to turn vacuum gas oil into gasoline and diesel.</span></div></div>
+            <div class="rung"><span class="lv">4</span><div><b>Deep conversion</b><span>Adds a coker to upgrade the bottom of the barrel. Sohar and Duqm are in this class.</span></div></div>
+          </div>
+        </div>
+        <div class="card t-line">
+          <h3>The world's refineries <span class="tag">GLOBAL</span></h3>
+          <div class="gstat">
+            <div><div class="n">103.5</div><div class="l">million b/d of capacity worldwide in 2023 (EIA)</div></div>
+            <div><div class="n">+2.6–4.9</div><div class="l">million b/d of new capacity possible by 2028</div></div>
+            <div><div class="n">1.24 M</div><div class="l">b/d at Jamnagar, India: the largest site (2013 figure)</div></div>
+            <div><div class="n">21.1</div><div class="l">Jamnagar's Nelson complexity, among the world's highest</div></div>
+          </div>
+          <p>Most new capacity is being built in <b>Asia-Pacific</b> (mainly China and India) and the <b>Middle East</b>, close to growing demand and to crude supply. Oman's Duqm refinery is part of that wave.</p>
+          <p class="note">Sources: EIA global refining outlook (Aug 2024); Offshore Technology; Nelson index table (Wikipedia, after OGJ).</p>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 02 FEED -->
+    <section class="panel branch" id="b02" data-v="02" style="left:1650px;top:180px;width:1300px;height:900px" aria-labelledby="h02">
+      <div class="bhead">
+        <div class="bnum">02</div>
+        <div><span class="eyebrow">Stage 0 · Raw material</span><h2 id="h02">Crude feed</h2></div>
+        <button class="btn" data-fig="fig06" type="button">Spec sheet ↗</button>
+        <p class="lede">Crude arrives stabilised from upstream, then is sampled and tested against the purchase contract before it enters any unit.</p>
+      </div>
+      <div class="bbody c64">
+        <div class="card t-line">
+          <h3>One barrel of Oman crude <span class="tag">TBP ASSAY · WT%</span></h3>
+          <div class="chart" id="barrel"></div>
+          <p class="note">TotalEnergies Oman crude assay (2016). Cuts do not overlap and sum to 100%. Hover a bar.</p>
+        </div>
+        <div class="card t-line">
+          <h3>Feed specification <span class="tag">AT RECEIPT</span></h3>
+          <dl class="k">
+            <dt>API</dt><dd class="mono">31.3 °API · 868.7 kg/m³</dd>
+            <dt>Sulfur</dt><dd class="mono">1.41 wt% · sour</dd>
+            <dt>TAN</dt><dd class="mono">0.64 mg KOH/g</dd>
+            <dt>Salt</dt><dd class="mono">59 mg/kg ≈ 18 ptb</dd>
+            <dt>Water</dt><dd class="mono">0.1 vol%</dd>
+            <dt>Pour pt</dt><dd class="mono">−36 °C</dd>
+            <dt>Ni / V</dt><dd class="mono">10.1 / 10.1 mg/kg</dd>
+          </dl>
+          <div class="io">
+            <div><span class="l">Enters</span>Inside contract band; BS&amp;W ≤ 0.5 vol%</div>
+            <div class="arr" aria-hidden="true">→</div>
+            <div class="out"><span class="l">Leaves</span>Metered, sampled, drained, to desalter</div>
+          </div>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 03 SEPARATE -->
+    <section class="panel branch" id="b03" data-v="03" style="left:3100px;top:180px;width:1300px;height:900px" aria-labelledby="h03">
+      <div class="bhead">
+        <div class="bnum">03</div>
+        <div><span class="eyebrow">Stages 1–3 · Physical separation</span><h2 id="h03">Desalt and distil</h2></div>
+        <button class="btn" data-fig="fig02" type="button">Column diagram ↗</button>
+        <p class="lede">Salt and water come out first. Heat and boiling point then split the crude into cuts, and vacuum recovers the heavy gas oil without cracking it.</p>
+      </div>
+      <div class="bbody c3">
+        <div class="card t-line">
+          <h3>Desalter <span class="tag">V-101</span></h3>
+          <ul><li>Wash water + <b>demulsifier</b> free the salt.</li><li>An <b>electric field</b> coalesces droplets.</li><li>At OXY much of this happens upstream.</li></ul>
+          <div class="io"><div><span class="l">In</span><span class="mono">≈ 18 ptb</span> salt</div><div class="arr" aria-hidden="true">→</div><div class="out"><span class="l">Out</span><span class="mono">≈ 1 ptb</span>, water ≤ 0.3 vol%</div></div>
+        </div>
+        <div class="card t-hot">
+          <h3>Atmospheric column <span class="tag">C-101</span></h3>
+          <ul><li>Furnace to <b class="mono">350–370 °C</b>.</li><li>Trays approach <b>equilibrium</b>; light ends rise.</li><li>Side draws, steam stripping, pumparounds.</li></ul>
+          <div class="io"><div><span class="l">In</span>Desalted crude</div><div class="arr" aria-hidden="true">→</div><div class="out"><span class="l">Out</span>Gas, naphtha, kero, gas oil, residue</div></div>
+        </div>
+        <div class="card t-line">
+          <h3>Vacuum column <span class="tag">C-201</span></h3>
+          <ul><li>Above ~370 °C oil <b>cracks</b> into coke and gums.</li><li>At <b class="mono">20–50 mmHg</b> boiling points drop.</li><li>Ejectors hold the vacuum.</li></ul>
+          <div class="io"><div><span class="l">In</span>Residue <span class="mono">54.7 wt%</span></div><div class="arr" aria-hidden="true">→</div><div class="out"><span class="l">Out</span>VGO <span class="mono">26.4</span> + VR <span class="mono">28.3 wt%</span></div></div>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 04 CONVERT -->
+    <section class="panel branch" id="b04" data-v="04" style="left:4550px;top:260px;width:1300px;height:900px" aria-labelledby="h04">
+      <div class="bhead">
+        <div class="bnum">04</div>
+        <div><span class="eyebrow">Stage 4 · Where the value is added</span><h2 id="h04">Conversion units</h2></div>
+        <button class="btn" data-fig="fig03" type="button">FCC loop ↗</button>
+        <p class="lede">Distillation only separates. Conversion units change the molecules: heavy ones are cracked into fuels, light ones reshaped into high-octane gasoline.</p>
+      </div>
+      <div class="bbody c3">
+        <div class="card t-hot"><h3>FCC</h3><dl class="k"><dt>Feed</dt><dd>Vacuum gas oil</dd><dt>Cat.</dt><dd>Y zeolite + ZSM-5</dd><dt>At</dt><dd class="mono">500–540 °C, seconds</dd><dt>Makes</dt><dd>Gasoline, LPG, olefins</dd></dl></div>
+        <div class="card t-hot"><h3>Hydrocracker</h3><dl class="k"><dt>Feed</dt><dd>VGO, deasphalted oil</dd><dt>Cat.</dt><dd>Acid + Ni, Mo, W</dd><dt>At</dt><dd class="mono">70–170 bar, 350–450 °C</dd><dt>Makes</dt><dd>Low-S diesel and jet</dd></dl></div>
+        <div class="card t-hot"><h3>Delayed coker</h3><dl class="k"><dt>Feed</dt><dd>Vacuum residue, 3.04 wt% S</dd><dt>Cat.</dt><dd>None, thermal</dd><dt>At</dt><dd class="mono">480–510 °C, hours</dd><dt>Makes</dt><dd>Gas oil, naphtha, coke</dd></dl></div>
+        <div class="card t-hot"><h3>Visbreaker</h3><dl class="k"><dt>Feed</dt><dd>Vacuum residue</dd><dt>Cat.</dt><dd>None, mild thermal</dd><dt>At</dt><dd class="mono">450–500 °C</dd><dt>Makes</dt><dd>Lower-viscosity fuel oil</dd></dl></div>
+        <div class="card t-hot"><h3>Catalytic reformer</h3><dl class="k"><dt>Feed</dt><dd>Hydrotreated naphtha</dd><dt>Cat.</dt><dd>Pt-Re / Pt-Sn</dd><dt>Limit</dt><dd class="mono">S, N &lt; 0.5 ppm in</dd><dt>Makes</dt><dd>Reformate + H₂</dd></dl></div>
+        <div class="card t-hot"><h3>Alky + isom</h3><dl class="k"><dt>Alky</dt><dd>Olefins + isobutane</dd><dt>Cat.</dt><dd>H₂SO₄ or HF</dd><dt>Isom</dt><dd>C5–C6 light naphtha</dd><dt>Makes</dt><dd>High-octane, low-S blendstock</dd></dl></div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 05 TREAT -->
+    <section class="panel branch" id="b05" data-v="05" style="left:4550px;top:2140px;width:1300px;height:900px" aria-labelledby="h05">
+      <div class="bhead">
+        <div class="bnum">05</div>
+        <div><span class="eyebrow">Stages 5–6 · Clean-up and hydrogen</span><h2 id="h05">Treating and sulfur</h2></div>
+        <button class="btn" data-fig="fig04" type="button">Sulfur path ↗</button>
+        <p class="lede">Hydrotreating turns sulfur into H₂S, the amine unit concentrates it, and the Claus unit converts it into elemental sulfur that is sold.</p>
+      </div>
+      <div class="bbody c2">
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <button class="fig" data-fig="fig04" type="button"><img src="fig04_sulfur_loop.png" alt="Sulfur path diagram" width="2800" height="1600"><span class="cap"><span><b>Sulfur path.</b> Sour feed to ULSD and solid sulfur.</span><span class="o">Open ↗</span></span></button>
+          <div class="card t-h2"><dl class="k"><dt>HDT</dt><dd>CoMo/NiMo · <span class="mono">300–400 °C, 30–100 bar</span></dd><dt>H₂</dt><dd>SMR + PSA, about <span class="mono">99.9 vol%</span></dd><dt>Claus</dt><dd><span class="mono">95–98%</span> recovery, more with a tail gas unit</dd></dl></div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Stream</th><th>Enters with</th><th>Leaves with</th></tr></thead>
+            <tbody>
+              <tr><td>Heavy naphtha</td><td class="mono">0.04 wt% S</td><td>S, N &lt; 0.5 ppm (reformer feed)</td></tr>
+              <tr><td>Kerosene</td><td class="mono">0.11 wt% S</td><td>Jet A-1, S ≤ 0.30 wt%</td></tr>
+              <tr><td>Gas oil</td><td class="mono">0.67 wt% S</td><td>ULSD, S ≤ 10 mg/kg</td></tr>
+              <tr><td>Refinery gas</td><td>H₂S-rich</td><td>Sweet fuel gas (MDEA)</td></tr>
+              <tr><td>Acid gas</td><td>Concentrated H₂S</td><td>Sulfur ≥ 99.9 wt%</td></tr>
+              <tr><td>Sour water</td><td>H₂S + NH₃</td><td>Stripped water, reused</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 06 PRODUCTS -->
+    <section class="panel branch" id="b06" data-v="06" style="left:3100px;top:2220px;width:1300px;height:900px" aria-labelledby="h06">
+      <div class="bhead">
+        <div class="bnum">06</div>
+        <div><span class="eyebrow">Stage 7 · Blend, test, release</span><h2 id="h06">Products and specs</h2></div>
+        <button class="btn" data-fig="fig07" type="button">Spec table ↗</button>
+        <p class="lede">Streams are blended in calculated ratios and dosed with additives. The lab releases a batch only when it meets its specification.</p>
+      </div>
+      <div class="bbody" style="grid-template-rows:auto minmax(0,1fr)">
+        <div class="c4" style="display:grid;gap:16px">
+          <div class="card t-blue"><span class="eyebrow">Gasoline · EN 228</span><div class="big">M91·95·98</div><p>Euro 5 aligned in Oman since July 2019.</p></div>
+          <div class="card t-blue"><span class="eyebrow">Diesel · EN 590</span><div class="big">10<small>mg/kg S</small></div><p>Cetane ≥ 51; Oman draft spec (2020).</p></div>
+          <div class="card t-blue"><span class="eyebrow">Jet A-1</span><div class="big">−47<small>°C freeze</small></div><p>Flash ≥ 38 °C, S ≤ 0.30 wt%.</p></div>
+          <div class="card t-s"><span class="eyebrow">By-products</span><div class="big">S · coke</div><p>Sulfur ≥ 99.9 wt%; Duqm sells coke.</p></div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Product</th><th>Standard</th><th>Key limits (typical)</th></tr></thead>
+            <tbody>
+              <tr><td>Gasoline</td><td>EN 228</td><td>RON 91/95/98 · S ≤ 10 mg/kg · benzene ≤ 1.0 vol% · aromatics ≤ 35 vol%</td></tr>
+              <tr><td>Diesel</td><td>EN 590</td><td>Cetane ≥ 51 · S ≤ 10 mg/kg · density 820–845 kg/m³ · flash &gt; 55 °C</td></tr>
+              <tr><td>Jet A-1</td><td>DEF STAN 91-091</td><td>Flash ≥ 38 °C · freeze ≤ −47 °C · aromatics ≤ 25 vol%</td></tr>
+              <tr><td>LPG</td><td>EN 589</td><td>Vapour pressure by grade · total S ≤ 50 mg/kg</td></tr>
+              <tr><td>Fuel oil</td><td>ISO 8217</td><td>S ≤ 0.50 wt% (IMO 2020) · RMG 380 ≤ 380 mm²/s</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 07 ECONOMICS -->
+    <section class="panel branch" id="b07" data-v="07" style="left:1650px;top:2220px;width:1300px;height:900px" aria-labelledby="h07">
+      <div class="bhead">
+        <div class="bnum">07</div>
+        <div><span class="eyebrow">Try it · Live calculators</span><h2 id="h07">Complexity and margin</h2></div>
+        <span></span>
+        <p class="lede">How complex a plant is, and how much a barrel earns as gasoline and diesel. Type your own numbers.</p>
+      </div>
+      <div class="bbody c55">
+        <div class="card t-hot calc">
+          <h3>Nelson complexity index <span class="tag">NCI</span></h3>
+          <div class="presets"><span class="eyebrow">Example plant:</span>
+            <button class="btn sm" type="button" data-preset="topping">Topping</button>
+            <button class="btn sm" type="button" data-preset="hydro">Hydroskimming</button>
+            <button class="btn sm on" type="button" data-preset="conv">Conversion</button>
+          </div>
+          <table>
+            <thead><tr><th>Unit</th><th class="num">Factor</th><th class="num">kb/d</th><th class="num">Adds</th></tr></thead>
+            <tbody id="nci-rows"></tbody>
+          </table>
+          <div class="nci"><span class="big mono" id="nci-out">9.1</span><span style="font-size:16px;color:var(--ink-2)">= Σ factor × unit capacity ÷ crude capacity</span></div>
+          <div class="gauge" aria-hidden="true">
+            <div class="trk"></div>
+            <div class="mk" style="left:29.5%"><span>Europe avg<br>6.5</span></div>
+            <div class="mk" style="left:43.2%"><span>US avg<br>9.5</span></div>
+            <div class="mk" style="left:95.9%"><span>Jamnagar<br>21.1</span></div>
+            <div class="ptr" id="nci-ptr" style="left:41%"></div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <div class="card t-h2 calc">
+            <h3>3-2-1 crack spread <span class="tag">$/BBL</span></h3>
+            <p>A refinery's gross margin proxy: 3 barrels of crude make about 2 of gasoline and 1 of diesel.</p>
+            <div class="spread">
+              <label for="cs-crude">Crude<input type="number" id="cs-crude" value="71" step="0.5" min="0"></label>
+              <label for="cs-gas">Gasoline<input type="number" id="cs-gas" value="88" step="0.5" min="0"></label>
+              <label for="cs-dsl">Diesel<input type="number" id="cs-dsl" value="95" step="0.5" min="0"></label>
+            </div>
+            <div class="formula">(2 × gasoline + 1 × diesel − 3 × crude) ÷ 3</div>
+            <div class="out3"><span class="big mono" id="cs-out">19.3</span><span style="font-size:17px;color:var(--ink-2)">$ per barrel of crude</span></div>
+            <p class="note">Crude default: Oman's 2025 average oil price, $71/bbl (NCSI). Product prices are illustrative; type your own.</p>
+          </div>
+          <div class="card t-line">
+            <h3>Why complexity pays</h3>
+            <ul><li>Complex plants turn cheap heavy, sour crude into light, clean fuels.</li><li>The cost: more capital, hydrogen, energy and maintenance.</li></ul>
+          </div>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- 08 OMAN -->
+    <section class="panel branch" id="b08" data-v="08" style="left:200px;top:2140px;width:1300px;height:900px" aria-labelledby="h08">
+      <div class="bhead">
+        <div class="bnum">08</div>
+        <div><span class="eyebrow">Focus · Sultanate of Oman</span><h2 id="h08">Refining in Oman</h2></div>
+        <button class="btn" data-fig="fig09" type="button">Profiles ↗</button>
+        <p class="lede">From one 50,000 b/d plant in 1982 to three refineries and 534,000 b/d, linked by pipeline to Muscat and by OQ to petrochemicals.</p>
+      </div>
+      <div class="bbody" style="grid-template-columns:470px minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto">
+        <div class="mapbox" style="grid-row:1 / span 2">
+          <svg class="omap" viewBox="20 0 740 950" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Map of Oman showing Sohar, Mina Al Fahal and Duqm refineries and the Muscat–Sohar product pipeline">
+            <path class="nb" d="M41.9,713.9L21.1,716.9L1.3,719.8L-21.0,723.1L-48.1,727.0L-69.2,729.9L-100.0,734.5L-127.7,738.4L-153.4,742.1L-179.5,745.9L-201.6,749.1L-214.8,752.9L-230.2,760.9L-254.1,773.4L-278.3,786.1L-290.6,792.7L-303.8,809.6L-310.4,818.1L-322.6,833.6L-331.8,845.3L-342.4,859.2L-347.2,871.7L-354.4,890.8L-360.7,895.7L-371.1,901.9L-380.5,906.3L-395.3,905.8L-403.5,893.9L-412.6,881.5L-417.0,876.4L-420.8,876.1L-435.5,877.7L-453.5,879.7L-474.2,877.6L-498.4,875.1L-521.1,873.0L-532.4,871.4L-547.2,863.2L-551.0,861.6L-555.0,861.3L-572.3,861.0L-589.9,860.8L-607.6,863.4L-624.2,862.4L-641.5,863.9L-647.8,867.0L-654.4,866.8L-658.8,869.6L-662.3,870.9L-667.0,868.5L-672.3,869.1L-680.2,867.0L-685.6,861.8L-690.3,857.0L-695.3,854.4L-701.0,853.0L-706.0,852.8L-712.3,855.7L-716.1,858.5L-725.8,867.6L-726.1,870.9L-721.7,876.3L-723.3,878.9L-729.0,882.1L-730.5,890.8L-731.5,895.5L-732.4,906.8L-729.9,915.7L-726.4,919.0L-726.1,922.9L-728.0,930.6L-733.4,932.8L-737.1,940.2L-739.6,943.6L-743.7,947.5L-760.1,960.4L-761.0,952.9L-766.1,941.8L-766.4,933.8L-768.9,926.0L-773.3,920.0L-781.5,913.8L-782.4,905.1L-788.4,896.7L-796.3,889.8L-801.0,877.3L-804.1,860.5L-825.2,838.5L-851.6,818.3L-859.8,806.7L-873.0,783.4L-879.6,765.0L-897.2,743.8L-897.8,735.6L-900.7,725.7L-904.7,714.6L-906.9,705.8L-924.9,667.5L-930.5,661.5L-935.6,652.8L-936.8,646.3L-938.4,642.7L-950.7,636.4L-962.6,620.2L-997.5,594.6L-1014.8,592.2L-1028.3,583.1L-1038.4,571.0L-1049.1,550.5L-1068.0,528.3L-1083.7,496.7L-1078.7,485.1L-1079.0,477.1L-1084.0,463.4L-1089.4,453.0L-1093.1,443.0L-1090.0,428.7L-1089.0,412.7L-1085.9,404.3L-1083.7,395.0L-1086.5,376.2L-1091.9,366.3L-1091.2,359.6L-1097.2,356.3L-1102.2,349.0L-1097.2,349.2L-1106.3,339.1L-1109.8,333.5L-1113.3,319.8L-1117.7,309.4L-1131.8,285.6L-1138.7,271.1L-1154.1,252.5L-1170.8,238.7L-1181.2,232.5L-1186.2,226.8L-1195.0,226.4L-1204.5,218.3L-1211.1,218.1L-1219.2,216.8L-1229.0,201.0L-1237.2,186.3L-1251.0,167.1L-1247.5,162.0L-1243.4,153.9L-1245.3,143.3L-1247.5,136.1L-1253.5,122.9L-1273.6,90.0L-1279.0,85.3L-1287.5,79.7L-1292.5,65.4L-1295.0,52.7L-1308.9,46.5L-1332.1,0.5L-1346.0,-15.6L-1351.3,-26.4L-1367.0,-44.1L-1374.6,-61.9L-1390.6,-78.2L-1404.5,-106.4L-1425.5,-134.8L-1434.7,-139.7L-1456.4,-141.6L-1465.8,-143.7L-1474.3,-137.5L-1474.9,-145.4L-1468.9,-156.3L-1460.8,-179.1L-1458.9,-199.1L-1445.7,-258.5L-1427.1,-255.5L-1411.7,-252.9L-1389.4,-249.2L-1366.1,-245.4L-1352.6,-243.2L-1348.2,-244.1L-1329.3,-258.6L-1312.3,-271.8L-1302.3,-287.8L-1292.5,-303.5L-1288.1,-306.7L-1273.0,-309.5L-1249.1,-314.2L-1225.5,-318.8L-1224.0,-320.2L-1218.3,-332.8L-1211.4,-348.6L-1209.8,-350.2L-1208.2,-351.9L-1191.2,-360.8L-1181.2,-366.2L-1195.6,-382.0L-1209.5,-397.0L-1224.9,-413.8L-1237.8,-426.8L-1257.6,-446.4L-1270.2,-459.3L-1247.9,-465.3L-1223.6,-471.8L-1199.1,-478.5L-1169.5,-486.5L-1146.6,-492.7L-1112.0,-502.0L-1095.3,-506.5L-1092.2,-507.7L-1079.3,-518.8L-1059.8,-515.7L-1030.5,-510.9L-1002.2,-506.5L-972.4,-501.3L-962.6,-496.9L-934.0,-481.3L-915.1,-471.0L-893.4,-459.0L-866.1,-444.1L-847.5,-433.9L-823.3,-420.7L-804.7,-405.7L-780.8,-386.6L-755.1,-365.7L-733.7,-349.4L-704.1,-327.1L-674.9,-305.1L-646.6,-283.4L-623.6,-266.1L-595.0,-244.3L-592.5,-243.5L-563.5,-241.0L-524.2,-237.6L-484.9,-234.4L-449.4,-231.3L-434.0,-234.4L-417.3,-232.4L-394.7,-229.6L-381.1,-227.8L-355.3,-224.4L-347.5,-210.1L-344.6,-200.1L-342.1,-190.3L-334.6,-181.5L-317.0,-181.7L-301.6,-181.9L-282.4,-182.2L-267.0,-182.4L-262.3,-173.6L-260.1,-164.8L-250.9,-143.9L-238.0,-127.6L-235.2,-121.7L-233.0,-112.8L-235.2,-109.3L-236.2,-105.6L-226.7,-96.6L-210.7,-89.1L-204.7,-87.2L-197.8,-83.7L-203.1,-78.7L-193.7,-66.6L-183.0,-54.6L-171.4,-51.8L-155.6,-33.4L-132.4,-21.5L-117.9,-5.8L-119.2,-5.5L-123.6,-7.1L-128.6,-9.3L-130.2,-7.3L-130.2,-0.8L-128.6,6.9L-121.4,13.6L-114.8,18.3L-112.2,27.4L-117.6,47.0L-119.2,46.8L-122.6,45.2L-126.4,44.9L-128.3,46.0L-123.9,60.0L-119.8,70.8L-114.4,79.2L-110.0,91.8L-106.6,97.0L-91.2,110.4L-86.8,121.5L-82.4,142.2L-72.9,153.6L-67.6,162.5L-60.7,170.0L-56.3,180.3L-50.0,188.3L-46.5,190.2L-41.8,191.1L-35.5,191.1L-28.3,189.1L-20.4,187.1L-14.1,191.1L-7.8,190.6L-7.2,194.3L-11.3,199.4L-16.6,212.1L-9.1,214.2L-2.2,215.2L3.2,217.3L6.0,217.3L6.0,219.9L6.3,232.1L8.2,236.7L11.3,240.8L16.1,247.0L20.8,253.2L25.8,259.4L30.5,265.4L35.2,271.6L40.3,277.8L45.0,283.8L49.7,290.0L54.4,296.2L59.5,302.4L64.2,308.4L68.9,314.6L73.9,320.8L78.6,327.0L83.4,333.0L88.1,339.2L92.2,344.3L99.4,345.2L101.9,345.6L108.5,346.4L118.6,347.9L132.1,349.5L147.8,351.6L165.4,353.9L184.3,356.3L203.8,358.9L223.3,361.5L241.9,364.0L259.5,366.3L275.5,368.4L288.7,370.2L299.1,371.5L305.7,372.3L307.9,372.6L314.8,373.6L316.1,373.3L322.1,365.8L328.4,376.4L333.7,385.2L340.9,397.4L348.8,410.3L356.3,422.5L361.7,431.8L358.9,441.3L355.7,451.7L352.6,462.0L349.1,472.4L346.0,482.8L342.8,493.2L339.7,503.7L336.5,513.9L333.1,524.4L329.9,534.8L326.8,545.2L323.6,555.5L320.5,565.9L317.3,576.4L313.9,586.8L310.7,597.1L307.6,607.5L303.8,620.1L294.4,623.3L279.6,628.7L264.5,634.1L249.4,639.4L234.3,645.0L219.2,650.4L204.4,655.7L189.3,661.1L174.3,666.5L159.2,671.9L144.1,677.3L129.3,682.6L114.2,688.0L99.1,693.4L84.0,698.8L69.2,704.2L54.1,709.5L41.9,713.9Z"/><path class="nb" d="M419.2,89.2L424.9,96.7L425.5,148.5L427.1,152.1L424.0,152.8L420.5,156.7L416.4,162.7L411.1,165.8L406.7,169.4L402.3,173.8L398.8,174.8L393.8,169.2L390.6,163.5L391.2,162.2L393.8,161.9L394.7,158.9L393.1,154.5L390.0,153.1L385.9,152.9L381.8,154.7L377.7,158.6L375.2,162.5L374.9,170.7L376.2,180.0L375.8,184.4L373.6,189.9L373.0,198.1L374.6,204.4L375.8,208.2L376.2,211.3L372.1,221.4L375.5,223.2L386.8,224.0L390.3,230.7L392.5,235.4L391.9,238.2L383.7,240.3L374.0,242.6L366.7,241.9L353.5,244.8L346.6,249.6L348.8,252.7L351.0,254.8L352.3,261.1L350.1,269.9L346.6,278.6L341.9,289.3L336.5,301.6L329.3,320.1L323.3,334.8L322.7,345.2L322.7,352.1L322.1,365.8L316.1,373.3L314.8,373.6L307.9,372.6L305.7,372.3L299.1,371.5L288.7,370.2L275.5,368.4L259.5,366.3L241.9,364.0L223.3,361.5L203.8,358.9L184.3,356.3L165.4,353.9L147.8,351.6L132.1,349.5L118.6,347.9L108.5,346.4L101.9,345.6L99.4,345.2L92.2,344.3L88.1,339.2L83.4,333.0L78.6,327.0L73.9,320.8L68.9,314.6L64.2,308.4L59.5,302.4L54.4,296.2L49.7,290.0L45.0,283.8L40.3,277.8L35.2,271.6L30.5,265.4L25.8,259.4L20.8,253.2L16.1,247.0L11.3,240.8L8.2,236.7L6.3,232.1L6.0,219.9L6.0,217.3L9.1,212.4L10.7,215.8L14.5,220.6L20.5,219.4L23.3,220.2L25.5,237.0L29.9,243.1L35.6,245.5L54.1,246.8L65.4,244.5L88.4,233.6L100.3,229.5L133.4,230.3L159.8,234.9L201.0,237.5L209.2,236.9L231.2,228.1L245.0,220.2L253.2,218.0L258.5,210.5L262.0,200.7L265.1,194.3L269.2,191.2L273.0,185.8L275.8,176.9L283.7,168.1L314.2,146.4L332.1,128.0L333.7,122.1L343.8,113.1L351.3,103.5L388.1,75.7L395.3,64.2L399.7,51.4L400.1,50.4L403.2,49.9L407.6,51.9L408.2,61.5L406.7,70.6L406.3,80.2L405.7,85.4L409.2,89.7L414.8,91.5L417.4,91.3L419.2,89.2ZM417.7,128.1L418.3,124.1L417.4,121.9L413.6,121.6L412.0,125.2L411.4,130.3L414.2,130.6L417.7,128.1ZM160.1,219.9L153.5,220.4L147.8,216.8L160.1,212.1L163.6,210.0L167.0,205.6L169.8,209.3L166.7,215.2L164.5,217.8L160.1,219.9ZM97.5,217.0L95.9,217.6L94.7,212.6L94.7,211.1L98.8,208.7L101.0,212.9L97.5,217.0ZM212.0,227.4L212.0,230.7L203.2,229.7L201.0,231.3L193.4,230.5L186.5,228.2L191.2,224.3L203.8,219.7L209.2,224.0L212.0,227.4ZM259.2,202.5L258.2,204.4L255.7,204.3L249.7,202.5L247.5,199.9L251.6,196.8L253.2,196.6L255.7,199.9L259.2,202.5Z"/><path class="nb" d="M138.4,934.3L94.4,951.1L82.7,958.4L72.4,967.7L64.5,979.1L58.8,999.3L62.9,1017.8L62.6,1027.5L51.3,1034.1L40.6,1038.8L29.0,1046.0L21.7,1047.7L15.8,1053.4L9.1,1057.5L-15.4,1067.8L-42.4,1075.9L-84.9,1085.6L-101.6,1096.0L-116.3,1103.2L-139.3,1105.3L-170.4,1115.2L-187.7,1123.0L-209.4,1136.1L-214.1,1140.2L-217.9,1149.6L-224.5,1157.9L-237.7,1171.5L-247.5,1178.3L-253.8,1178.6L-266.7,1182.4L-281.4,1183.2L-306.6,1178.5L-313.2,1181.7L-318.5,1187.1L-337.7,1196.2L-357.5,1214.8L-372.0,1219.7L-395.3,1225.6L-411.6,1233.2L-422.6,1236.3L-436.5,1238.0L-462.6,1237.1L-487.4,1239.9L-510.4,1245.1L-521.1,1254.9L-533.3,1270.6L-553.5,1277.1L-558.2,1282.6L-564.5,1294.2L-577.4,1297.1L-589.3,1299.1L-601.3,1294.0L-623.9,1307.9L-632.4,1310.3L-645.3,1310.8L-654.7,1313.7L-661.3,1312.9L-669.5,1307.4L-687.1,1300.9L-700.0,1305.1L-701.0,1292.1L-722.3,1251.8L-717.9,1216.8L-717.9,1211.9L-722.0,1196.2L-734.6,1182.1L-734.3,1164.0L-738.7,1150.9L-741.8,1137.7L-740.9,1134.1L-740.6,1130.9L-747.2,1110.5L-749.4,1106.3L-750.0,1102.0L-748.1,1098.8L-748.1,1094.8L-751.6,1088.7L-755.1,1076.6L-772.3,1067.3L-768.9,1058.5L-765.4,1061.6L-761.0,1064.2L-760.1,1058.5L-760.1,1054.3L-767.3,1027.7L-756.6,992.2L-760.1,960.4L-743.7,947.5L-739.6,943.6L-737.1,940.2L-733.4,932.8L-728.0,930.6L-726.1,922.9L-726.4,919.0L-729.9,915.7L-732.4,906.8L-731.5,895.5L-730.5,890.8L-729.0,882.1L-723.3,878.9L-721.7,876.3L-726.1,870.9L-725.8,867.6L-716.1,858.5L-712.3,855.7L-706.0,852.8L-701.0,853.0L-695.3,854.4L-690.3,857.0L-685.6,861.8L-680.2,867.0L-672.3,869.1L-667.0,868.5L-662.3,870.9L-658.8,869.6L-654.4,866.8L-647.8,867.0L-641.5,863.9L-624.2,862.4L-607.6,863.4L-589.9,860.8L-572.3,861.0L-555.0,861.3L-551.0,861.6L-547.2,863.2L-532.4,871.4L-521.1,873.0L-498.4,875.1L-474.2,877.6L-453.5,879.7L-435.5,877.7L-420.8,876.1L-417.0,876.4L-412.6,881.5L-403.5,893.9L-395.3,905.8L-380.5,906.3L-371.1,901.9L-360.7,895.7L-354.4,890.8L-347.2,871.7L-342.4,859.2L-331.8,845.3L-322.6,833.6L-310.4,818.1L-303.8,809.6L-290.6,792.7L-278.3,786.1L-254.1,773.4L-230.2,760.9L-214.8,752.9L-201.6,749.1L-179.5,745.9L-153.4,742.1L-127.7,738.4L-100.0,734.5L-69.2,729.9L-48.1,727.0L-21.0,723.1L1.3,719.8L21.1,716.9L41.9,713.9L45.6,723.2L49.4,732.7L53.2,742.1L57.3,751.4L61.0,760.9L64.8,770.2L68.9,779.6L72.7,788.9L76.4,798.4L80.5,807.7L84.3,817.1L88.1,826.4L91.9,835.9L95.9,845.1L99.7,854.6L103.5,864.1L107.3,873.2L113.6,876.1L117.3,884.9L122.7,897.1L128.0,909.5L133.4,921.9L138.4,934.3Z"/><path class="nb" d="M409.5,-30.1L401.3,-18.9L389.0,-9.4L383.7,-12.4L379.9,-12.4L371.1,-8.6L364.8,-8.1L353.2,-1.6L342.8,1.7L335.6,1.3L333.1,0.7L331.5,-3.7L331.5,-5.3L336.2,-4.5L352.3,-10.4L372.4,-19.9L374.3,-24.1L371.1,-31.1L372.1,-32.6L385.0,-29.1L399.4,-36.0L411.7,-37.8L417.7,-33.1L409.5,-30.1ZM211.0,-1008.7L235.3,-1007.6L244.7,-1009.7L258.5,-1014.8L268.9,-1017.9L274.3,-1018.2L279.6,-1020.6L283.4,-1023.6L292.5,-1044.3L296.9,-1049.5L312.3,-1061.2L325.5,-1068.5L339.0,-1075.1L356.3,-1079.6L379.3,-1079.3L397.5,-1077.7L407.9,-1077.7L412.9,-1077.2L416.7,-1077.8L418.9,-1079.3L421.4,-1088.3L425.2,-1091.2L431.5,-1093.8L440.6,-1093.8L451.6,-1094.5L460.7,-1093.8L472.4,-1090.4L487.5,-1090.1L497.2,-1090.7L503.2,-1087.1L507.3,-1082.6L509.5,-1078.7L509.8,-1073.4L509.8,-1069.4L511.4,-1067.9L517.4,-1065.4L525.8,-1063.7L542.5,-1061.4L557.9,-1057.3L566.1,-1054.4L577.4,-1050.0L590.6,-1038.9L595.7,-1037.3L601.6,-1036.1L605.7,-1036.4L615.8,-1041.0L624.6,-1037.6L629.0,-1038.1L639.1,-1040.7L649.8,-1037.4L676.2,-1025.4L679.0,-1025.7L681.5,-1024.4L683.7,-1021.6L685.3,-1018.2L687.2,-1007.8L695.0,-1000.3L704.2,-993.2L715.2,-989.5L738.1,-980.4L747.9,-973.0L758.3,-960.5L770.5,-943.9L772.4,-942.4L804.5,-942.9L840.3,-942.9L844.7,-936.4L843.8,-923.2L845.1,-909.8L848.5,-900.5L848.5,-891.9L846.0,-887.5L843.8,-882.6L843.2,-880.5L847.9,-877.2L852.0,-870.2L852.6,-860.2L850.4,-854.9L850.7,-850.6L852.9,-846.9L854.5,-840.7L854.2,-836.9L851.3,-833.2L849.5,-828.5L847.3,-822.6L846.3,-818.0L842.2,-815.7L838.8,-814.3L839.1,-808.4L841.0,-803.4L842.8,-797.5L840.6,-793.4L839.1,-788.9L835.9,-781.4L836.9,-775.2L833.4,-769.8L829.0,-765.2L826.2,-761.5L825.6,-756.1L822.4,-754.3L816.4,-749.9L812.7,-746.8L807.0,-746.0L806.1,-743.4L806.7,-740.9L809.2,-739.5L812.7,-734.1L820.2,-724.8L798.8,-723.7L792.2,-715.3L785.0,-703.6L788.4,-680.0L785.0,-667.7L787.2,-660.9L792.5,-656.2L799.8,-653.6L813.0,-653.4L821.8,-651.4L822.7,-648.4L817.7,-643.8L809.5,-635.0L805.1,-631.2L791.6,-613.8L791.6,-606.5L792.8,-600.4L798.8,-581.5L804.5,-563.3L814.9,-530.3L814.9,-522.8L811.4,-505.7L811.4,-495.5L812.7,-482.1L811.7,-475.1L814.2,-459.6L817.1,-458.5L839.7,-455.5L860.1,-452.8L887.5,-449.0L896.0,-439.9L901.0,-420.0L900.7,-405.0L898.5,-397.3L878.7,-375.5L858.9,-353.3L839.1,-331.3L816.1,-305.9L832.8,-287.7L843.2,-276.2L857.6,-260.3L859.5,-256.5L859.5,-250.2L874.3,-225.9L879.6,-213.2L884.4,-205.8L896.0,-194.1L907.6,-182.7L920.2,-177.5L928.7,-176.3L948.2,-170.5L955.1,-165.6L966.4,-153.5L980.0,-155.1L982.8,-155.1L983.4,-154.3L983.7,-150.4L981.9,-131.7L985.6,-112.8L988.1,-84.2L987.2,-79.3L984.1,-71.0L983.7,-65.8L983.1,-62.6L983.7,-61.1L988.1,-59.1L997.3,-58.0L1019.3,-61.3L1021.8,-60.4L1027.1,-57.0L1030.9,-51.8L1031.2,-49.2L1025.9,-44.8L1024.9,-37.5L1026.5,-26.2L1025.6,-24.9L1020.8,-22.3L1019.3,-6.2L1018.3,-4.7L1012.7,-3.1L985.9,-4.0L982.8,-3.7L972.7,0.5L955.8,3.6L951.0,5.4L944.4,10.3L940.0,16.2L939.1,21.7L938.1,22.8L928.4,21.7L924.9,26.4L905.7,33.6L903.5,35.1L900.7,40.8L898.2,56.8L895.7,71.1L894.4,73.1L888.5,78.1L887.8,79.7L888.5,85.3L885.9,95.4L883.7,123.4L881.2,131.2L876.5,131.9L872.7,135.8L865.8,140.7L851.0,136.9L839.4,133.0L800.4,123.7L796.3,119.2L793.8,111.4L787.2,109.2L777.4,121.0L744.7,114.1L733.4,116.2L726.8,112.7L708.9,112.3L695.0,105.0L674.9,110.1L659.2,111.0L637.5,98.2L614.2,94.6L595.3,95.7L585.6,94.7L569.9,90.0L562.3,85.3L550.1,88.9L544.4,82.2L509.8,76.0L503.2,63.9L498.5,52.8L498.2,41.4L489.7,21.4L486.9,-7.5L483.7,-18.9L479.0,-28.7L472.7,-37.0L464.2,-45.9L456.7,-49.5L424.3,-56.4L418.0,-55.4L403.5,-51.0L388.1,-41.0L362.6,-35.5L357.3,-31.3L351.0,-21.6L342.8,-15.9L331.5,-17.4L319.2,-11.7L296.6,4.1L284.6,8.8L274.6,8.5L263.9,1.0L240.0,-9.1L224.6,-12.4L202.9,-10.1L192.8,-11.9L175.2,-23.6L170.8,-32.2L160.7,-37.9L129.6,-50.8L104.1,-67.9L99.4,-74.3L96.3,-83.9L85.3,-95.5L60.4,-104.9L46.3,-114.9L29.9,-117.2L14.5,-116.8L7.9,-118.6L1.6,-123.0L-19.5,-143.7L-19.5,-152.0L-32.4,-172.3L-35.5,-179.6L-38.3,-199.6L-41.8,-204.9L-55.3,-213.2L-57.5,-218.5L-54.4,-225.7L-54.4,-231.3L-61.6,-236.3L-72.0,-239.1L-74.5,-245.3L-72.6,-257.2L-74.2,-264.8L-83.6,-276.7L-97.1,-289.1L-111.0,-307.2L-116.3,-311.8L-119.8,-323.7L-124.8,-337.9L-132.4,-338.8L-169.8,-321.9L-180.8,-331.5L-213.5,-348.1L-216.0,-350.6L-218.2,-354.3L-214.1,-356.6L-210.0,-357.4L-201.9,-354.5L-196.8,-357.9L-198.7,-363.6L-206.9,-367.0L-218.2,-366.7L-215.1,-361.5L-225.8,-356.6L-228.0,-349.9L-226.4,-341.9L-225.5,-330.5L-229.9,-325.1L-233.0,-322.5L-247.2,-321.9L-253.8,-316.8L-258.2,-315.7L-263.8,-319.6L-267.9,-322.7L-271.1,-329.5L-272.0,-334.3L-270.7,-336.9L-272.3,-340.8L-276.7,-346.0L-281.4,-348.9L-285.8,-349.4L-289.9,-352.5L-292.8,-358.4L-300.0,-362.1L-304.4,-363.0L-304.7,-380.9L-304.7,-396.5L-304.7,-412.2L-320.1,-412.8L-333.6,-413.3L-333.6,-426.4L-333.6,-450.6L-327.4,-469.5L-320.7,-487.6L-330.8,-501.0L-341.5,-515.2L-348.4,-521.2L-356.6,-539.0L-360.7,-546.8L-364.1,-549.7L-368.2,-551.5L-382.4,-550.9L-395.9,-560.3L-411.6,-571.6L-430.8,-585.3L-447.5,-594.2L-454.4,-596.2L-470.8,-596.8L-472.3,-598.6L-473.3,-603.5L-473.3,-609.1L-468.2,-617.2L-467.6,-622.4L-478.6,-639.9L-482.1,-645.1L-491.5,-647.0L-489.6,-652.1L-489.6,-655.5L-490.9,-658.1L-493.1,-659.4L-495.9,-659.6L-503.5,-657.5L-508.8,-665.3L-526.4,-687.8L-532.1,-690.6L-533.0,-692.0L-528.9,-698.9L-521.7,-709.1L-520.4,-715.0L-521.7,-721.5L-529.6,-733.8L-527.7,-739.0L-524.2,-744.8L-524.2,-749.4L-518.9,-748.8L-512.3,-748.6L-510.1,-752.3L-510.1,-765.1L-508.5,-769.8L-487.4,-791.3L-476.7,-796.2L-468.9,-800.6L-467.0,-807.1L-468.6,-810.5L-470.1,-815.4L-470.8,-818.8L-479.6,-828.6L-482.7,-833.5L-483.0,-837.9L-480.8,-845.7L-477.0,-851.9L-464.8,-855.5L-457.5,-858.6L-456.6,-861.2L-465.7,-865.8L-485.5,-867.1L-500.0,-865.8L-504.7,-867.3L-511.3,-875.9L-518.9,-880.5L-525.5,-883.4L-532.1,-882.9L-536.2,-884.0L-537.1,-887.6L-546.9,-916.0L-549.7,-919.9L-554.1,-920.9L-557.9,-921.0L-560.4,-923.0L-563.2,-926.9L-565.1,-932.0L-565.1,-938.6L-564.8,-944.3L-566.0,-948.1L-569.5,-951.8L-574.2,-954.5L-578.3,-957.5L-585.5,-982.5L-588.4,-989.2L-588.4,-989.8L-588.1,-991.1L-589.0,-996.8L-585.5,-1001.7L-585.9,-1003.7L-592.8,-1010.0L-602.5,-1016.2L-605.0,-1017.4L-605.0,-1024.0L-604.7,-1029.1L-605.7,-1033.7L-607.6,-1036.3L-607.6,-1038.2L-603.8,-1043.1L-606.3,-1046.4L-620.5,-1054.4L-625.8,-1058.3L-635.5,-1059.1L-636.8,-1061.7L-635.2,-1067.2L-631.8,-1073.9L-626.4,-1080.6L-624.5,-1084.0L-622.7,-1090.1L-622.0,-1094.3L-616.1,-1100.2L-615.7,-1101.8L-617.6,-1103.9L-622.3,-1105.1L-627.4,-1105.5L-628.9,-1106.7L-629.9,-1109.8L-629.3,-1122.7L-630.8,-1130.5L-632.7,-1136.2L-631.5,-1148.9L-634.9,-1151.3L-640.3,-1158.0L-642.5,-1163.7L-641.2,-1165.9L-640.3,-1169.4L-639.3,-1174.3L-639.6,-1177.8L-644.7,-1181.2L-648.1,-1184.8L-648.8,-1188.7L-650.0,-1193.4L-652.2,-1197.1L-653.2,-1199.6L-651.3,-1201.1L-644.4,-1202.2L-634.3,-1201.5L-625.8,-1201.4L-621.1,-1203.8L-615.4,-1226.8L-610.1,-1232.8L-603.8,-1236.4L-591.8,-1228.3L-586.8,-1225.3L-583.7,-1225.3L-582.1,-1223.2L-567.9,-1204.0L-561.6,-1198.3L-557.9,-1193.6L-555.4,-1188.2L-551.3,-1184.4L-545.6,-1182.5L-538.4,-1177.3L-533.7,-1173.2L-525.8,-1164.9L-517.6,-1161.6L-487.4,-1155.6L-470.4,-1152.8L-465.7,-1152.0L-452.8,-1156.1L-437.7,-1155.4L-432.1,-1155.3L-411.9,-1172.4L-406.0,-1178.2L-394.0,-1181.2L-387.4,-1188.0L-376.7,-1196.2L-363.5,-1204.0L-351.6,-1211.0L-342.1,-1215.2L-325.5,-1225.2L-315.1,-1228.6L-306.0,-1228.4L-292.4,-1216.9L-281.1,-1206.3L-277.7,-1201.7L-283.3,-1197.6L-294.0,-1193.6L-295.9,-1190.6L-296.5,-1186.9L-296.2,-1183.3L-294.6,-1180.4L-281.8,-1173.5L-280.2,-1169.8L-280.2,-1166.0L-281.8,-1163.6L-284.6,-1162.3L-293.7,-1160.3L-301.2,-1158.2L-304.1,-1155.9L-306.3,-1153.3L-306.0,-1150.5L-303.8,-1147.3L-287.7,-1138.3L-286.2,-1135.0L-283.0,-1130.6L-278.9,-1127.9L-272.3,-1127.2L-269.2,-1125.4L-254.1,-1109.0L-250.3,-1107.8L-232.4,-1111.4L-229.9,-1111.3L-229.5,-1107.2L-227.0,-1083.9L-224.8,-1071.8L-222.0,-1060.1L-217.0,-1049.3L-211.3,-1039.2L-203.4,-1032.9L-185.8,-1025.2L-177.3,-1023.1L-155.0,-1021.6L-132.7,-1018.2L-119.8,-1014.6L-115.7,-1012.2L-112.2,-1008.4L-101.6,-990.5L-84.6,-977.8L-50.0,-958.7L-33.3,-952.3L23.0,-940.3L60.4,-940.9L163.6,-964.1L198.2,-969.9L211.0,-969.9L203.2,-965.4L190.3,-962.6L198.2,-959.3L210.1,-958.9L215.8,-959.3L219.9,-962.3L220.5,-967.2L219.9,-972.1L214.2,-993.6L211.0,-1008.7Z"/>
+            <path class="om" d="M630.9,599.2L625.5,600.5L623.7,599.8L624.0,587.9L636.5,573.1L645.0,555.8L651.0,571.2L640.6,579.8L635.3,594.6L630.9,599.2ZM138.4,934.3L133.4,921.9L128.0,909.5L122.7,897.1L117.3,884.9L113.6,876.1L107.3,873.2L103.5,864.1L99.7,854.6L95.9,845.1L91.9,835.9L88.1,826.4L84.3,817.1L80.5,807.7L76.4,798.4L72.7,788.9L68.9,779.6L64.8,770.2L61.0,760.9L57.3,751.4L53.2,742.1L49.4,732.7L45.6,723.2L41.9,713.9L54.1,709.5L69.2,704.2L84.0,698.8L99.1,693.4L114.2,688.0L129.3,682.6L144.1,677.3L159.2,671.9L174.3,666.5L189.3,661.1L204.4,655.7L219.2,650.4L234.3,645.0L249.4,639.4L264.5,634.1L279.6,628.7L294.4,623.3L303.8,620.1L307.6,607.5L310.7,597.1L313.9,586.8L317.3,576.4L320.5,565.9L323.6,555.5L326.8,545.2L329.9,534.8L333.1,524.4L336.5,513.9L339.7,503.7L342.8,493.2L346.0,482.8L349.1,472.4L352.6,462.0L355.7,451.7L358.9,441.3L361.7,431.8L356.3,422.5L348.8,410.3L340.9,397.4L333.7,385.2L328.4,376.4L322.1,365.8L322.7,352.1L322.7,345.2L323.3,334.8L329.3,320.1L336.5,301.6L341.9,289.3L346.6,278.6L350.1,269.9L352.3,261.1L351.0,254.8L348.8,252.7L346.6,249.6L353.5,244.8L366.7,241.9L374.0,242.6L383.7,240.3L391.9,238.2L392.5,235.4L390.3,230.7L386.8,224.0L375.5,223.2L372.1,221.4L376.2,211.3L375.8,208.2L374.6,204.4L373.0,198.1L373.6,189.9L375.8,184.4L376.2,180.0L374.9,170.7L375.2,162.5L377.7,158.6L381.8,154.7L385.9,152.9L390.0,153.1L393.1,154.5L394.7,158.9L393.8,161.9L391.2,162.2L390.6,163.5L393.8,169.2L398.8,174.8L402.3,173.8L406.7,169.4L411.1,165.8L416.4,162.7L420.5,156.7L424.0,152.8L427.1,152.1L435.9,176.9L449.1,200.0L460.7,212.7L472.7,230.0L491.3,246.0L499.7,251.4L533.7,262.6L552.6,266.7L578.4,270.8L596.3,279.4L602.3,279.9L611.4,277.4L618.3,277.6L635.3,289.5L640.3,300.8L647.6,306.6L653.8,315.9L657.9,325.7L672.1,340.7L682.5,357.5L692.8,369.9L702.0,377.5L715.8,380.6L727.1,384.0L728.4,392.4L727.1,403.3L724.9,411.3L714.5,426.9L712.0,436.5L700.4,452.3L687.5,478.9L681.8,484.9L661.1,498.6L646.0,515.2L628.1,543.9L614.5,572.3L609.2,581.4L598.2,583.4L590.9,582.6L586.2,579.8L588.1,572.1L589.4,563.3L582.8,564.3L576.8,566.1L563.3,587.5L555.7,596.7L554.2,608.6L550.4,624.0L545.3,638.0L542.8,649.9L542.8,656.6L546.9,673.0L547.2,689.8L549.4,699.9L551.3,712.0L545.0,715.7L539.4,717.5L518.0,718.8L496.0,722.7L476.8,729.7L465.2,736.8L450.4,752.2L441.3,791.8L426.5,808.6L416.7,812.1L392.8,813.5L359.5,818.1L347.5,822.2L328.0,846.3L326.5,853.9L330.2,859.5L331.5,865.5L329.9,871.2L320.8,886.5L311.4,897.6L285.9,904.6L276.5,900.6L268.0,898.4L251.3,898.1L224.3,900.9L214.5,909.0L198.8,914.9L184.3,923.9L157.0,927.3L138.4,934.3ZM419.2,89.2L417.4,91.3L414.8,91.5L409.2,89.7L405.7,85.4L406.3,80.2L406.7,70.6L408.2,61.5L407.6,51.9L403.2,49.9L400.1,50.4L407.6,36.9L410.4,34.7L412.9,35.7L419.9,34.3L423.3,26.9L426.2,22.8L429.3,23.3L430.6,25.6L429.6,36.9L429.6,46.2L425.8,74.7L421.8,79.6L419.9,83.6L419.2,89.2ZM417.7,128.1L414.2,130.6L411.4,130.3L412.0,125.2L413.6,121.6L417.4,121.9L418.3,124.1L417.7,128.1Z"/>
+            <text class="ctry" x="40" y="470">SAUDI ARABIA</text>
+            <text class="ctry" x="200" y="215">UAE</text>
+            <text class="ctry" x="70" y="905">YEMEN</text>
+            <text class="sea" x="520" y="175">Gulf of Oman</text>
+            <text class="sea" x="590" y="800">Arabian Sea</text>
+            <polyline class="pl" points="447.3,199 500,240 573.9,288.2 612.4,278.9"/>
+            <circle class="pin" cx="447.3" cy="199" r="33.7"/>
+            <circle class="pin" cx="612.4" cy="278.9" r="26.6"/>
+            <circle class="pin d" cx="537.2" cy="645" r="35.8"/>
+            <text class="lbl" x="405" y="193" text-anchor="end">Sohar</text>
+            <text class="sub" x="405" y="223" text-anchor="end">198k b/d</text>
+            <text class="lbl" x="640" y="345" text-anchor="end">Mina Al Fahal</text>
+            <text class="sub" x="640" y="375" text-anchor="end">106k b/d · Muscat</text>
+            <text class="lbl" x="491" y="647" text-anchor="end">Duqm</text>
+            <text class="sub" x="491" y="677" text-anchor="end">230k b/d</text>
+            <text class="sub" x="470" y="285" text-anchor="end" style="fill:var(--hot)">Product pipeline 290 km</text>
+          </svg>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:14px;min-width:0">
+          <div class="otiles">
+            <div class="otile"><div class="n">1.002 mb/d</div><div class="l">crude produced in 2025 (NCSI)</div></div>
+            <div class="otile"><div class="n">≈ 53%</div><div class="l">refining capacity relative to crude output</div></div>
+            <div class="otile"><div class="n">308 M bbl</div><div class="l">crude exported in 2025</div></div>
+            <div class="otile"><div class="n">DME Oman</div><div class="l">Oman Blend futures: a Mideast sour crude benchmark for Asia</div></div>
+          </div>
+          <div class="card t-line" style="gap:10px">
+            <div class="rrow"><div><b>Duqm</b><small>OQ + KPI 50:50 · export</small></div><div class="t"><div class="d" style="width:100%"></div></div><div class="c">230k</div></div>
+            <div class="rrow"><div><b>Sohar</b><small>OQ · deep conversion</small></div><div class="t"><div style="width:86.1%"></div></div><div class="c">198k</div></div>
+            <div class="rrow"><div><b>Mina Al Fahal</b><small>OQ · Muscat</small></div><div class="t"><div style="width:46.1%"></div></div><div class="c">106k</div></div>
+          </div>
+        </div>
+        <ol class="tl tl6" style="grid-column:2">
+          <li><span class="y">1982</span><p>Oman Refinery Co. starts at 50,000 b/d.</p></li>
+          <li><span class="y">2007</span><p>ORPIC formed; Sohar at 116,400 b/d.</p></li>
+          <li><span class="y">2018</span><p>Muscat–Sohar product pipeline opens.</p></li>
+          <li><span class="y">2019</span><p>SRIP: Sohar 198k b/d. OQ brand.</p></li>
+          <li><span class="y">2021</span><p>Liwa Plastics, Sohar: US$6.7 bn.</p></li>
+          <li><span class="y">2024</span><p>OQ8 Duqm inaugurated, 230k b/d.</p></li>
+        </ol>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- SATELLITES -->
+    <section class="panel sat" id="sline" data-v="line" style="left:560px;top:1200px;width:980px;height:500px" aria-labelledby="h-line">
+      <h3 id="h-line">Process line <span class="eyebrow">Hover · click to fly</span></h3>
+      <div class="strip-wrap">
+        <svg class="strip" viewBox="0 0 1160 300" role="img" aria-label="Refinery process line from crude tanks to products">
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+          <path class="pp" d="M110,160 H128" marker-end="url(#ah)"/><path class="pp" d="M226,160 H264" marker-end="url(#ah)"/><path class="pp" d="M362,160 H380" marker-end="url(#ah)"/>
+          <path class="pp" d="M430,196 V238 H380" marker-end="url(#ah)"/><path class="pp" d="M478,160 H514" marker-end="url(#ah)"/><path class="pp" d="M322,262 H500 V196 H514" marker-end="url(#ah)"/>
+          <path class="pp" d="M612,160 H650" marker-end="url(#ah)"/><path class="pp" d="M748,160 H876" marker-end="url(#ah)"/><path class="pp" d="M974,160 H1010" marker-end="url(#ah)"/>
+          <path class="pp h2" d="M699,92 V122"/><path class="pp s" d="M748,186 H800 V262 H1010"/>
+          <text class="lb" x="440" y="222">atm. residue</text><text class="lb" x="806" y="152">treated</text><text class="lb" x="812" y="254">H₂S → sulfur</text>
+          <g class="node" tabindex="0" role="button" data-i="0" data-b="02"><rect x="14" y="132" width="96" height="56" rx="6"/><text x="62" y="156">Crude tanks</text><text class="tg" x="62" y="174">TK-101</text></g>
+          <g class="node" tabindex="0" role="button" data-i="1" data-b="03"><rect x="130" y="132" width="96" height="56" rx="6"/><text x="178" y="156">Desalter</text><text class="tg" x="178" y="174">V-101</text></g>
+          <g class="node hot" tabindex="0" role="button" data-i="2" data-b="03"><rect x="266" y="132" width="96" height="56" rx="6"/><text x="314" y="156">Furnace</text><text class="tg" x="314" y="174">H-101</text></g>
+          <g class="node" tabindex="0" role="button" data-i="3" data-b="03"><rect x="382" y="124" width="96" height="72" rx="6"/><text x="430" y="156">Atmospheric</text><text x="430" y="171">column</text><text class="tg" x="430" y="187">C-101</text></g>
+          <g class="node" tabindex="0" role="button" data-i="4" data-b="03"><rect x="226" y="236" width="96" height="52" rx="6"/><text x="274" y="258">Vacuum col.</text><text class="tg" x="274" y="276">C-201</text></g>
+          <g class="node hot" tabindex="0" role="button" data-i="5" data-b="04"><rect x="516" y="124" width="96" height="88" rx="6"/><text x="564" y="152">Conversion</text><text x="564" y="167">FCC · HCU</text><text x="564" y="182">coker · CCR</text><text class="tg" x="564" y="200">R-301…</text></g>
+          <g class="node h2n" tabindex="0" role="button" data-i="6" data-b="05"><rect x="652" y="40" width="96" height="52" rx="6"/><text x="700" y="62">H₂ plant</text><text class="tg" x="700" y="80">SMR + PSA</text></g>
+          <g class="node" tabindex="0" role="button" data-i="7" data-b="05"><rect x="652" y="124" width="96" height="72" rx="6"/><text x="700" y="152">Treating</text><text x="700" y="167">HDT · amine</text><text class="tg" x="700" y="185">R-401…</text></g>
+          <g class="node sn" tabindex="0" role="button" data-i="8" data-b="05"><rect x="1012" y="238" width="132" height="46" rx="6"/><text x="1078" y="258">Sulfur (Claus)</text><text class="tg" x="1078" y="274">SRU-601</text></g>
+          <g class="node" tabindex="0" role="button" data-i="9" data-b="06"><rect x="878" y="124" width="96" height="72" rx="6"/><text x="926" y="152">Blending</text><text x="926" y="167">+ lab</text><text class="tg" x="926" y="185">TK-501…</text></g>
+          <g class="node prod" tabindex="0" role="button" data-i="10" data-b="06"><rect x="1012" y="110" width="132" height="100" rx="6"/><text x="1078" y="136">Products</text><text x="1078" y="154">LPG · M91/95/98</text><text x="1078" y="170">Jet A-1 · Diesel</text><text x="1078" y="186">Fuel oil · Coke</text></g>
+          <g class="node prod" tabindex="0" role="button" data-i="11" data-b="08"><rect x="878" y="40" width="266" height="52" rx="6"/><text x="1011" y="62">Refineries in Oman</text><text class="tg" x="1011" y="80">Mina Al Fahal · Sohar · Duqm</text></g>
+        </svg>
+      </div>
+      <div class="readout" aria-live="polite"><span class="tgb" id="ro-tag">START</span><p id="ro-text"><b>Pick a station.</b> Hover a box to read what happens there; click it to fly to its branch.</p></div>
+    </section>
+
+    <section class="panel sat" id="sabout" data-v="about" style="left:560px;top:1730px;width:980px;height:330px" aria-labelledby="h-about">
+      <h3 id="h-about">How to present <span class="eyebrow">Keys</span></h3>
+      <div class="keys">
+        <span><kbd>1</kbd>–<kbd>8</kbd> open a branch</span>
+        <span><kbd>→</kbd> <kbd>Space</kbd> next stop</span>
+        <span><kbd>←</kbd> previous stop</span>
+        <span><kbd>0</kbd> or <kbd>Esc</kbd> back to hub</span>
+        <span><kbd>L</kbd> process line</span>
+        <span><kbd>F</kbd> figures · <kbd>S</kbd> sources</span>
+      </div>
+      <p style="font-size:15.5px;color:var(--ink-2)">Click any panel to fly to it. Buttons marked ↗ open a figure full size. Branch 07 has live calculators: type your own numbers.</p>
+    </section>
+
+    <section class="panel sat" id="sfigs" data-v="figs" style="left:4460px;top:1190px;width:980px;height:590px" aria-labelledby="h-figs">
+      <h3 id="h-figs">Figure set <span class="eyebrow">9 · report-ready PNG</span></h3>
+      <div class="figgrid" id="figgrid"></div>
+    </section>
+
+    <section class="panel sat" id="ssrc" data-v="src" style="left:4460px;top:1810px;width:980px;height:300px" aria-labelledby="h-src">
+      <h3 id="h-src">Sources <span class="eyebrow">Verified vs typical</span></h3>
+      <ol class="srcs">
+        <li><a href="https://ts.totalenergies.com/wp-content/uploads/2020/03/OMAN.pdf" target="_blank" rel="noopener">TotalEnergies Oman assay</a></li>
+        <li><a href="https://eia.gov/analysis/pdfpages/globalrefiningoutlook.php" target="_blank" rel="noopener">EIA global refining outlook</a></li>
+        <li><a href="https://en.wikipedia.org/wiki/Nelson_complexity_index" target="_blank" rel="noopener">Nelson complexity index</a></li>
+        <li><a href="https://oq.com/en/about-us/our-journey" target="_blank" rel="noopener">OQ: our journey</a></li>
+        <li><a href="https://www.hellenicshippingnews.com/oman-oil-exports-dip-0-1-by-end-2025/" target="_blank" rel="noopener">Oman oil output 2025 (NCSI)</a></li>
+        <li><a href="https://www.hydrocarbonengineering.com/tanks-terminals/23032018/muscat-suhar-product-pipeline-and-al-jefnain-terminal-inaugurated/" target="_blank" rel="noopener">Muscat–Sohar pipeline</a></li>
+        <li><a href="https://www.gulfmerc.com/press-release/DME-Oman-to-Price-Kuwaiti-Crude-Oil-from-February-2020" target="_blank" rel="noopener">DME Oman benchmark</a></li>
+        <li><a href="https://mees.com/2020/5/15/refining-petrochemicals/oman-commissions-liwa-plastics/591ebf00-96bd-11ea-88a7-1932c1ec5ce3" target="_blank" rel="noopener">MEES: Liwa Plastics</a></li>
+        <li><a href="https://portfolio-pplus.com/SiteMains/Details/396" target="_blank" rel="noopener">P+ Sohar refinery</a></li>
+        <li><a href="https://theenergyyear.com/news/oman-and-kuwait-inaugurate-the-duqm-refinery/" target="_blank" rel="noopener">The Energy Year: Duqm</a></li>
+      </ol>
+      <p style="font-size:14px;color:var(--ink-3)">Temperatures, pressures, spec limits and calculator presets are typical or illustrative values, not design data for any specific Omani unit.</p>
+    </section>
+  </div>
+</div>
+
+<nav class="rail" aria-label="Views">
+  <button type="button" class="nav" id="prev" aria-label="Previous stop">‹</button>
+  <button type="button" data-go="hub">Hub</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-go="01">01 Basics</button>
+  <button type="button" data-go="02">02 Feed</button>
+  <button type="button" data-go="03">03 Separate</button>
+  <button type="button" data-go="04">04 Convert</button>
+  <button type="button" data-go="05">05 Treat</button>
+  <button type="button" data-go="06">06 Products</button>
+  <button type="button" data-go="07">07 Margin</button>
+  <button type="button" data-go="08">08 Oman</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-go="line">Line</button>
+  <button type="button" data-go="figs">Figures</button>
+  <button type="button" data-go="src">Sources</button>
+  <button type="button" class="nav" id="next" aria-label="Next stop">›</button>
+</nav>
+
+<div class="lbx" id="lbx" hidden role="dialog" aria-modal="true" aria-labelledby="lbx-t">
+  <div class="lbx-bar"><b id="lbx-t">Figure</b>
+    <div class="ctr"><button type="button" id="lbx-prev">‹ Prev</button><button type="button" id="lbx-next">Next ›</button><button type="button" id="lbx-zoom">Zoom</button><button type="button" id="lbx-close">Close ✕</button></div>
+  </div>
+  <div class="lbx-st" id="lbx-st"><img id="lbx-img" alt=""></div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var FIGS = [
+    { id: "fig01", file: "fig01_refinery_roadmap.png", t: "Refinery block flow diagram" },
+    { id: "fig02", file: "fig02_atmospheric_column.png", t: "Atmospheric column, Oman cut yields" },
+    { id: "fig03", file: "fig03_fcc_loop.png", t: "FCC riser-regenerator loop" },
+    { id: "fig04", file: "fig04_sulfur_loop.png", t: "Sulfur path" },
+    { id: "fig05", file: "fig05_oman_crude_barrel.png", t: "Oman crude barrel" },
+    { id: "fig06", file: "fig06_crude_feed_spec.png", t: "Crude feed specification" },
+    { id: "fig07", file: "fig07_product_specs.png", t: "Product specifications" },
+    { id: "fig08", file: "fig08_oman_refinery_capacity.png", t: "Oman refinery capacity" },
+    { id: "fig09", file: "fig09_oman_refineries.png", t: "Refineries in Oman" }
+  ];
+  var CUTS = [
+    { n: "Gas + LPG", r: "<15 °C", v: 1.12, s: "—", d: "—", to: "Gas plant, LPG" },
+    { n: "Light naphtha", r: "15–80 °C", v: 4.3, s: "0.02", d: "655", to: "Isomerisation" },
+    { n: "Heavy naphtha", r: "80–150 °C", v: 8.7, s: "0.04", d: "732", to: "HDT → reformer" },
+    { n: "Kerosene", r: "150–230 °C", v: 10.1, s: "0.11", d: "785", to: "Jet A-1" },
+    { n: "Gas oil", r: "230–375 °C", v: 21.1, s: "0.67", d: "850", to: "Diesel HDT" },
+    { n: "Vacuum gas oil", r: "375–565 °C", v: 26.4, s: "1.49", d: "914", to: "FCC / hydrocracker" },
+    { n: "Vacuum residue", r: ">565 °C", v: 28.3, s: "3.04", d: "995", to: "Coker / fuel oil" }
+  ];
+  var STATIONS = [
+    ["TK-101", "<b>Crude tanks.</b> Crude arrives and is tested: Oman crude is 31.3 °API with 1.41 wt% sulfur."],
+    ["V-101", "<b>Desalter.</b> Cuts salt from about 18 ptb to about 1 ptb so the furnace and column do not corrode."],
+    ["H-101", "<b>Furnace.</b> Takes crude to 350–370 °C; any hotter and it starts to crack."],
+    ["C-101", "<b>Atmospheric column.</b> Splits crude by boiling range; 54.7 wt% leaves as residue above 375 °C."],
+    ["C-201", "<b>Vacuum column.</b> At 20–50 mmHg recovers 26.4 wt% VGO; 28.3 wt% stays as vacuum residue."],
+    ["R-301", "<b>Conversion.</b> FCC, hydrocracker, coker, reformer, alkylation and isomerisation upgrade the barrel."],
+    ["SMR", "<b>Hydrogen plant.</b> Supplies H₂ at about 99.9 vol% to hydrotreaters and the hydrocracker."],
+    ["R-401", "<b>Treating.</b> Gas oil goes from 0.67 wt% sulfur to 10 mg/kg; amine collects the H₂S."],
+    ["SRU-601", "<b>Claus unit.</b> Converts H₂S to elemental sulfur at 95–98% recovery."],
+    ["TK-501", "<b>Blending and lab.</b> Batches are blended to spec and certified before release."],
+    ["PRODUCTS", "<b>Products.</b> LPG, M91/M95/M98, Jet A-1, 10 ppm diesel, fuel oil, coke and sulfur."],
+    ["OMAN", "<b>Refining in Oman.</b> Mina Al Fahal 106k, Sohar 198k, Duqm 230k b/d."]
+  ];
+  var SEQ = ["--seq1", "--seq2", "--seq3", "--seq4", "--seq5", "--seq6", "--seq7"];
+
+  var tip = document.getElementById("tip");
+  function showTip(h, x, y) { tip.innerHTML = h; tip.hidden = false; var r = tip.getBoundingClientRect(); var nx = Math.min(x + 14, innerWidth - r.width - 8); var ny = y - r.height - 12; if (ny < 8) ny = y + 18; tip.style.left = Math.max(8, nx) + "px"; tip.style.top = ny + "px"; }
+  function hideTip() { tip.hidden = true; }
+  function rows(a) { return a.map(function (r) { return '<div class="r"><span>' + r[0] + "</span><span>" + r[1] + "</span></div>"; }).join(""); }
+
+  (function () {
+    var el = document.getElementById("barrel"), max = 30, h = "";
+    CUTS.forEach(function (c, i) {
+      var p = c.v / max * 100;
+      h += '<div class="crow"><div class="nm">' + c.n + "<small>" + c.r + '</small></div><div class="tr"><div class="bar" tabindex="0" data-i="' + i + '" style="width:' + p.toFixed(2) + "%;background:var(" + SEQ[i] + ')" aria-label="' + c.n + " " + c.v.toFixed(1) + ' wt%"></div><span class="v" style="left:' + p.toFixed(2) + '%">' + c.v.toFixed(1) + "%</span></div></div>";
+    });
+    h += '<div class="axis"><span></span><div class="ticks">' + [0, 10, 20, 30].map(function (t) { return '<span style="left:' + (t / max * 100) + '%">' + t + "</span>"; }).join("") + "</div></div>";
+    el.innerHTML = h;
+    el.querySelectorAll(".bar").forEach(function (b) {
+      var c = CUTS[+b.dataset.i], html = "<b>" + c.n + " · " + c.r + "</b>" + rows([["Yield", c.v.toFixed(1) + " wt%"], ["Sulfur", c.s + " wt%"], ["Density", c.d + " kg/m³"], ["Goes to", c.to]]);
+      b.addEventListener("pointermove", function (e) { showTip(html, e.clientX, e.clientY); });
+      b.addEventListener("pointerleave", hideTip);
+      b.addEventListener("focus", function () { var r = b.getBoundingClientRect(); showTip(html, r.right, r.top); });
+      b.addEventListener("blur", hideTip);
+    });
+  })();
+
+  /* Nelson complexity calculator */
+  var UNITS = [
+    { k: "cdu", n: "Crude distillation", f: 1 },
+    { k: "vdu", n: "Vacuum distillation", f: 2 },
+    { k: "th", n: "Thermal (coker, visbreaker)", f: 2.75 },
+    { k: "htr", n: "Hydrotreating", f: 3 },
+    { k: "ref", n: "Catalytic reforming", f: 5 },
+    { k: "fcc", n: "Catalytic cracking (FCC)", f: 6 },
+    { k: "hcu", n: "Hydrocracking", f: 6 },
+    { k: "alk", n: "Alkylation", f: 10 },
+    { k: "iso", n: "Isomerisation", f: 15 }
+  ];
+  var PRESETS = {
+    topping: { cdu: 100, vdu: 0, th: 0, htr: 0, ref: 0, fcc: 0, hcu: 0, alk: 0, iso: 0 },
+    hydro:   { cdu: 100, vdu: 0, th: 0, htr: 60, ref: 20, fcc: 0, hcu: 0, alk: 0, iso: 0 },
+    conv:    { cdu: 200, vdu: 100, th: 40, htr: 120, ref: 30, fcc: 50, hcu: 40, alk: 10, iso: 10 }
+  };
+  var tb = document.getElementById("nci-rows");
+  tb.innerHTML = UNITS.map(function (u) {
+    return '<tr><td>' + u.n + '</td><td class="num">' + u.f + '</td><td class="num"><input type="number" min="0" step="5" id="u-' + u.k + '" aria-label="' + u.n + ' capacity, thousand barrels per day"></td><td class="num" id="a-' + u.k + '">0</td></tr>';
+  }).join("");
+  function nci() {
+    var cdu = Math.max(+document.getElementById("u-cdu").value || 0, 0), total = 0;
+    UNITS.forEach(function (u) {
+      var cap = Math.max(+document.getElementById("u-" + u.k).value || 0, 0);
+      var add = cdu > 0 ? u.f * cap / cdu : 0;
+      total += add;
+      document.getElementById("a-" + u.k).textContent = add.toFixed(2);
+    });
+    document.getElementById("nci-out").textContent = cdu > 0 ? total.toFixed(1) : "—";
+    document.getElementById("nci-ptr").style.left = Math.min(total / 22 * 100, 100) + "%";
+  }
+  function preset(name) {
+    var p = PRESETS[name];
+    UNITS.forEach(function (u) { document.getElementById("u-" + u.k).value = p[u.k]; });
+    document.querySelectorAll("[data-preset]").forEach(function (b) { b.classList.toggle("on", b.dataset.preset === name); });
+    nci();
+  }
+  tb.addEventListener("input", function () { document.querySelectorAll("[data-preset]").forEach(function (b) { b.classList.remove("on"); }); nci(); });
+  document.querySelectorAll("[data-preset]").forEach(function (b) { b.addEventListener("click", function () { preset(b.dataset.preset); }); });
+  preset("conv");
+
+  /* crack spread */
+  function spread() {
+    var c = +document.getElementById("cs-crude").value || 0, g = +document.getElementById("cs-gas").value || 0, d = +document.getElementById("cs-dsl").value || 0;
+    var v = (2 * g + d - 3 * c) / 3;
+    var o = document.getElementById("cs-out");
+    o.textContent = v.toFixed(1);
+    o.style.color = v < 0 ? "var(--hot)" : "var(--h2)";
+  }
+  ["cs-crude", "cs-gas", "cs-dsl"].forEach(function (id) { document.getElementById(id).addEventListener("input", spread); });
+  spread();
+
+  document.getElementById("figgrid").innerHTML = FIGS.map(function (f) {
+    return '<button class="fig" type="button" data-fig="' + f.id + '"><img src="' + f.file + '" alt="' + f.t + '" title="' + f.t + '" loading="lazy"><span class="cap"><span>' + f.t + '</span><span class="o">↗</span></span></button>';
+  }).join("");
+
+  /* camera */
+  var body = document.body, stage = document.getElementById("stage");
+  var VIEWS = {
+    hub: null,
+    "01": { x: 200, y: 260, w: 1300, h: 900 }, "02": { x: 1650, y: 180, w: 1300, h: 900 }, "03": { x: 3100, y: 180, w: 1300, h: 900 }, "04": { x: 4550, y: 260, w: 1300, h: 900 },
+    "05": { x: 4550, y: 2140, w: 1300, h: 900 }, "06": { x: 3100, y: 2220, w: 1300, h: 900 }, "07": { x: 1650, y: 2220, w: 1300, h: 900 }, "08": { x: 200, y: 2140, w: 1300, h: 900 },
+    line: { x: 560, y: 1200, w: 980, h: 500, pad: 260 }, about: { x: 560, y: 1730, w: 980, h: 330, pad: 300 },
+    figs: { x: 4460, y: 1190, w: 980, h: 590, pad: 240 }, src: { x: 4460, y: 1810, w: 980, h: 300, pad: 300 }
+  };
+  var ORDER = ["hub", "01", "02", "03", "04", "05", "06", "07", "08"];
+  var panels = Array.prototype.slice.call(document.querySelectorAll(".panel[data-v]"));
+  var pills = Array.prototype.slice.call(document.querySelectorAll(".rail [data-go]"));
+  var current = "hub";
+  function isFlow() { return innerWidth < 820 || innerHeight < 520; }
+  function apply() {
+    var flow = isFlow();
+    body.classList.toggle("flow", flow);
+    if (flow) { stage.style.transform = ""; return; }
+    var RAIL = 96, TOP = 56, s, cx, cy;
+    if (current === "hub") { s = Math.min(innerWidth / 6180, (innerHeight - RAIL - TOP) / 3360); cx = 3000; cy = 1650; }
+    else { var v = VIEWS[current], pad = v.pad || 180; s = Math.min(innerWidth / (v.w + pad), Math.max(innerHeight - RAIL - TOP, 240) / (v.h + pad * 0.55)); cx = v.x + v.w / 2; cy = v.y + v.h / 2; }
+    var x = innerWidth / 2 - cx * s, y = (innerHeight - RAIL + TOP) / 2 - cy * s;
+    stage.style.transform = "translate(" + x + "px," + y + "px) scale(" + s + ")";
+  }
+  function setView(t, fromHash) {
+    if (!(t in VIEWS)) return;
+    current = t; hideTip();
+    panels.forEach(function (p) { p.classList.toggle("focused", p.dataset.v === t && t !== "hub"); });
+    pills.forEach(function (p) { p.classList.toggle("on", p.dataset.go === t); });
+    if (isFlow()) { var el = t === "hub" ? document.getElementById("hub") : panels.filter(function (p) { return p.dataset.v === t; })[0]; if (el && !fromHash) el.scrollIntoView({ behavior: "smooth", block: "start" }); }
+    apply();
+    try { history.replaceState(null, "", t === "hub" ? location.pathname + location.search : "#v" + t); } catch (e) {}
+  }
+  function step(d) { var i = ORDER.indexOf(current); if (i < 0) i = 0; setView(ORDER[(i + d + ORDER.length) % ORDER.length]); }
+  panels.forEach(function (p) {
+    p.addEventListener("click", function (e) {
+      if (isFlow() || p.classList.contains("focused")) return;
+      if (e.target.closest("a, .btn, .fig, .node, .bar, input")) return;
+      setView(p.dataset.v);
+    });
+  });
+  document.getElementById("viewport").addEventListener("click", function (e) {
+    if (!isFlow() && (e.target.id === "stage" || e.target.id === "viewport" || e.target.closest("svg.conns"))) setView("hub");
+  });
+  pills.forEach(function (p) { p.addEventListener("click", function () { setView(p.dataset.go); }); });
+  document.getElementById("prev").addEventListener("click", function () { step(-1); });
+  document.getElementById("next").addEventListener("click", function () { step(1); });
+
+  var roTag = document.getElementById("ro-tag"), roText = document.getElementById("ro-text");
+  var nodes = document.querySelectorAll(".strip .node");
+  nodes.forEach(function (n) {
+    var i = +n.dataset.i;
+    function show() { roTag.textContent = STATIONS[i][0]; roText.innerHTML = STATIONS[i][1]; nodes.forEach(function (m) { m.classList.toggle("on", m === n); }); }
+    n.addEventListener("pointerenter", show); n.addEventListener("focus", show);
+    function go(e) { e.stopPropagation(); setView(n.dataset.b); }
+    n.addEventListener("click", go);
+    n.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } });
+  });
+
+  var lbx = document.getElementById("lbx"), img = document.getElementById("lbx-img"), ttl = document.getElementById("lbx-t"), st = document.getElementById("lbx-st"), zb = document.getElementById("lbx-zoom");
+  var fi = 0, last = null;
+  function render() { var f = FIGS[fi]; img.src = f.file; img.alt = f.t; ttl.textContent = f.id.replace("fig", "Fig. ") + " · " + f.t; st.classList.remove("zoom"); zb.textContent = "Zoom"; }
+  function openFig(id) { var i = FIGS.findIndex(function (f) { return f.id === id; }); if (i < 0) return; fi = i; last = document.activeElement; render(); lbx.hidden = false; hideTip(); document.getElementById("lbx-close").focus(); }
+  function closeFig() { lbx.hidden = true; if (last && last.focus) last.focus({ preventScroll: true }); }
+  document.addEventListener("click", function (e) { var b = e.target.closest("[data-fig]"); if (b) { e.preventDefault(); e.stopPropagation(); openFig(b.dataset.fig); } }, true);
+  document.getElementById("lbx-close").addEventListener("click", closeFig);
+  document.getElementById("lbx-prev").addEventListener("click", function () { fi = (fi + FIGS.length - 1) % FIGS.length; render(); });
+  document.getElementById("lbx-next").addEventListener("click", function () { fi = (fi + 1) % FIGS.length; render(); });
+  zb.addEventListener("click", function () { var z = st.classList.toggle("zoom"); zb.textContent = z ? "Fit" : "Zoom"; });
+  lbx.addEventListener("click", function (e) { if (e.target === lbx || e.target === st) closeFig(); });
+
+  addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!lbx.hidden) {
+      if (e.key === "Escape") { e.preventDefault(); closeFig(); }
+      else if (e.key === "ArrowRight") document.getElementById("lbx-next").click();
+      else if (e.key === "ArrowLeft") document.getElementById("lbx-prev").click();
+      return;
+    }
+    if (e.target.closest && e.target.closest("input")) { if (e.key === "Escape") e.target.blur(); return; }
+    var k = e.key.toLowerCase();
+    if (/^[1-8]$/.test(k)) setView("0" + k);
+    else if (k === "0" || k === "h" || k === "escape") setView("hub");
+    else if (k === "l") setView("line");
+    else if (k === "f") setView("figs");
+    else if (k === "s") setView("src");
+    else if (k === "i") setView("about");
+    else if (k === "arrowright" || k === "pagedown" || (k === " " && !e.target.closest("button, a, [role=button]"))) { e.preventDefault(); step(1); }
+    else if (k === "arrowleft" || k === "pageup") { e.preventDefault(); step(-1); }
+  });
+  addEventListener("resize", apply);
+  var h = (location.hash || "").replace("#v", "");
+  setView(h in VIEWS ? h : "hub", true);
+})();
+</script>
+
+</body>
+</html>
