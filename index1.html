@@ -1,0 +1,795 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Oman Refinery Roadmap</title>
+<meta name="description" content="Interactive canvas: a refinery roadmap from crude tank to finished product, with the spec in and out of each stage and Oman's three refineries.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+/* Layout: a zoomable drawing board. Hub in the centre, six branches form a process loop around it (01-02-03 across the top, 04-05-06 back along the bottom), satellites left and right. A camera flies between them; a pill rail drives it. */
+:root {
+  /* single bright theme: white board, strong ink, vivid process colours */
+  color-scheme: light;
+  --paper: #f5f8fb; --paper-2: #e6eef6; --sheet: #ffffff;
+  --ink: #0b1726; --ink-2: #2c3e52; --ink-3: #56687c;
+  --rule: #cdd9e5; --rule-soft: #e4ecf3; --grid: rgba(29, 78, 160, 0.07);
+  --line: #1d4f9f; --hot: #e2570f; --hot-soft: #fff0e6;
+  --h2: #04875f; --h2-soft: #dcf5ea; --sulfur: #a86b00; --sulfur-soft: #fff4d6;
+  --blue: #1f6fe0; --blue-soft: #e3eefd; --figmat: #ffffff; --bar: #1f6fe0;
+  --seq1: #9cc3f5; --seq2: #78acf0; --seq3: #5495ea; --seq4: #3580e3; --seq5: #1f6fe0; --seq6: #1a5cc0; --seq7: #134a9e;
+  --rail: rgba(255, 255, 255, 0.95); --rail-ink: #2c3e52;
+  --console: #0b1726; --console-ink: #ffffff; --console-ink-2: #b9c7d6;
+  --shadow: 0 14px 40px -18px rgba(18, 52, 96, 0.22), 0 0 0 1px rgba(18, 52, 96, 0.04);
+  --ring: rgba(226, 87, 15, 0.12);
+  --f-display: "Archivo", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "Public Sans", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --ease: cubic-bezier(0.2, 0.7, 0, 1);
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--paper); color: var(--ink); font-family: var(--f-body); overflow: hidden; }
+img { max-width: 100%; }
+h1, h2, h3 { margin: 0; font-family: var(--f-display); text-wrap: balance; }
+p { margin: 0; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 3px solid var(--hot); outline-offset: 3px; border-radius: 4px; }
+
+/* ---------- canvas ---------- */
+.viewport {
+  position: fixed; inset: 0; overflow: hidden;
+  background-color: var(--paper);
+  background-image: radial-gradient(ellipse at 50% 45%, #ffffff 0%, var(--paper) 60%, var(--paper-2) 100%);
+}
+.stage {
+  position: absolute; left: 0; top: 0; width: 4600px; height: 3200px; transform-origin: 0 0;
+  transition: transform 1100ms var(--ease);
+  background-image: linear-gradient(var(--grid) 1px, transparent 1px), linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+@media (prefers-reduced-motion: reduce) { .stage { transition: none; } }
+svg.conns { position: absolute; left: 0; top: 0; width: 4600px; height: 3200px; overflow: visible; pointer-events: none; }
+.conns .pipe { fill: none; stroke: var(--line); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; opacity: .7; }
+.conns .spoke { fill: none; stroke: var(--hot); stroke-width: 3; stroke-dasharray: 10 12; opacity: .55; }
+.conns .flow { fill: none; stroke: var(--hot); stroke-width: 7; stroke-dasharray: 18 40; stroke-linecap: round; animation: flow 2.4s linear infinite; opacity: .8; }
+@keyframes flow { to { stroke-dashoffset: -58; } }
+@media (prefers-reduced-motion: reduce) { .conns .flow { animation: none; } }
+.conns text { fill: var(--ink-3); font-family: var(--f-mono); font-size: 26px; letter-spacing: .06em; }
+.conns marker path { fill: var(--line); }
+
+.panel {
+  position: absolute; background: var(--sheet); border: 2px solid #c2d1df; border-radius: 16px;
+  box-shadow: var(--shadow); overflow: hidden; display: flex; flex-direction: column;
+  font-size: 20px; line-height: 1.5; color: var(--ink);
+  transition: box-shadow 420ms var(--ease), border-color 420ms var(--ease);
+  cursor: pointer;
+}
+.panel.focused { border-color: var(--hot); cursor: default; box-shadow: 0 0 0 12px var(--ring), 0 30px 80px -24px rgba(19, 32, 45, 0.4); }
+.panel .go {
+  position: absolute; right: 26px; bottom: 22px; font-family: var(--f-mono); font-size: 18px; color: var(--hot);
+  border: 2px solid var(--hot); border-radius: 999px; padding: 6px 16px; background: var(--sheet); transition: opacity 300ms;
+}
+.panel.focused .go { opacity: 0; pointer-events: none; }
+
+/* branch layout */
+.branch { padding: 44px 52px 48px; gap: 26px; }
+.bhead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px 30px; align-items: end; border-bottom: 3px solid var(--line); padding-bottom: 20px; }
+.bnum { font-family: var(--f-display); font-weight: 900; font-stretch: 62%; font-size: 138px; line-height: .78; color: var(--hot); font-variant-numeric: tabular-nums; }
+.eyebrow { font-family: var(--f-mono); font-size: 16px; letter-spacing: .12em; text-transform: uppercase; color: var(--ink-3); }
+.bhead h2 { font-size: 66px; line-height: .95; font-weight: 800; font-stretch: 74%; text-transform: uppercase; margin-top: 6px; }
+.bhead p.lede { grid-column: 1 / -1; font-size: 22px; color: var(--ink-2); max-width: 1120px; }
+.bhead .btn { align-self: end; }
+.bbody { display: grid; gap: 22px; flex: 1; min-height: 0; }
+.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.c64 { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
+
+.card { background: var(--sheet); border: 1.5px solid var(--rule); border-radius: 10px; padding: 18px 20px; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.card.t-hot { border-top: 5px solid var(--hot); }
+.card.t-line { border-top: 5px solid var(--line); }
+.card.t-h2 { border-top: 5px solid var(--h2); }
+.card.t-s { border-top: 5px solid var(--sulfur); }
+.card.t-blue { border-top: 5px solid var(--blue); }
+.card h3 { font-size: 25px; font-weight: 750; font-stretch: 85%; display: flex; flex-wrap: wrap; gap: 10px; align-items: baseline; }
+.tag { font-family: var(--f-mono); font-size: 13px; font-weight: 600; color: var(--ink-3); border: 1.5px solid var(--rule); border-radius: 4px; padding: 1px 7px; letter-spacing: .05em; }
+.card ul { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 18.5px; color: var(--ink-2); }
+.card ul b { color: var(--ink); }
+.card p { font-size: 18px; color: var(--ink-2); }
+.k { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 16px; margin: 0; font-size: 18.5px; }
+.k dt { font-family: var(--f-mono); font-size: 13.5px; color: var(--ink-3); text-transform: uppercase; letter-spacing: .06em; padding-top: 3px; }
+.k dd { margin: 0; }
+.io { display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); gap: 10px; margin-top: auto; }
+.io > div { background: var(--paper); border: 1.5px solid var(--rule-soft); border-radius: 6px; padding: 9px 12px; font-size: 16px; line-height: 1.35; min-width: 0; }
+.io > div.out { border-color: var(--line); }
+.io .l { display: block; font-family: var(--f-mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 3px; }
+.io .arr { display: flex; align-items: center; color: var(--hot); font: 700 26px/1 var(--f-mono); background: none; border: 0; padding: 0; }
+
+.btn { appearance: none; font: 600 17px/1 var(--f-body); color: var(--line); background: var(--sheet); border: 2px solid var(--line); border-radius: 999px; padding: 11px 18px; cursor: pointer; white-space: nowrap; transition: background .15s, color .15s; }
+.btn:hover { background: var(--line); color: var(--sheet); }
+
+/* tables inside panels */
+table { border-collapse: collapse; width: 100%; font-size: 17.5px; }
+th, td { text-align: left; padding: 9px 12px; border-bottom: 1.5px solid var(--rule-soft); vertical-align: top; }
+th { font-family: var(--f-mono); font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3); background: var(--paper); font-weight: 600; }
+td:first-child { font-weight: 650; }
+tr:last-child td { border-bottom: 0; }
+.tw { border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--sheet); }
+
+/* charts */
+.chart { display: grid; gap: 10px; }
+.crow { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; align-items: center; }
+.crow .nm { text-align: right; font-size: 17px; line-height: 1.15; }
+.crow .nm small { display: block; font-family: var(--f-mono); font-size: 13px; color: var(--ink-3); }
+.crow .tr { position: relative; height: 38px; border-left: 2px solid var(--ink-3); }
+.crow .bar { height: 100%; border-radius: 0 6px 6px 0; min-width: 4px; }
+.crow .bar:hover, .crow .bar:focus-visible { filter: brightness(1.12) saturate(1.1); }
+.crow .v { position: absolute; top: 50%; transform: translateY(-50%); padding-left: 10px; font: 600 16px/1 var(--f-mono); white-space: nowrap; pointer-events: none; }
+.axis { display: grid; grid-template-columns: 210px minmax(0, 1fr); gap: 16px; }
+.axis .ticks { position: relative; height: 20px; font: 13px/1 var(--f-mono); color: var(--ink-3); }
+.axis .ticks span { position: absolute; transform: translateX(-50%); }
+.note { font-size: 14.5px; color: var(--ink-3); }
+
+.tip { position: fixed; z-index: 90; pointer-events: none; max-width: 280px; background: var(--console); color: var(--console-ink); border-radius: 6px; padding: 10px 12px; font-size: 13.5px; line-height: 1.4; box-shadow: 0 10px 30px -10px rgba(0,0,0,.5); }
+.tip b { display: block; font-family: var(--f-display); font-stretch: 85%; font-size: 16px; margin-bottom: 3px; }
+.tip .r { display: flex; justify-content: space-between; gap: 14px; font-family: var(--f-mono); font-size: 12px; color: var(--console-ink-2); }
+.tip .r span:last-child { color: var(--console-ink); }
+
+/* figure thumbs */
+.fig { margin: 0; padding: 0; border: 1.5px solid var(--rule); border-radius: 10px; overflow: hidden; background: var(--figmat); cursor: zoom-in; display: flex; flex-direction: column; text-align: left; font: inherit; color: inherit; min-width: 0; }
+.fig img { display: block; width: 100%; height: auto; }
+.fig .cap { display: flex; justify-content: space-between; gap: 10px; align-items: center; padding: 9px 14px; background: var(--sheet); border-top: 1.5px solid var(--rule); font-size: 15px; color: var(--ink-2); width: 100%; }
+.fig .cap b { color: var(--ink); }
+.fig .cap .o { font: 600 13px/1 var(--f-mono); color: var(--blue); white-space: nowrap; }
+
+/* hub */
+.hub { border: 3px solid var(--line); padding: 30px 56px; gap: 16px; cursor: default; justify-content: center;
+  background: linear-gradient(180deg, var(--hot-soft) 0%, #ffffff 55%, var(--blue-soft) 100%); }
+.hub .tb { display: flex; flex-wrap: wrap; gap: 6px 26px; font: 500 15px/1.3 var(--f-mono); color: var(--ink-3); text-transform: uppercase; letter-spacing: .08em; }
+.hub .tb b { color: var(--ink); font-weight: 600; }
+.hub h1 { font-size: 104px; line-height: .86; font-weight: 850; font-stretch: 68%; text-transform: uppercase; letter-spacing: -.005em; }
+.hub h1 em { font-style: normal; color: var(--hot); }
+.hub .lede { font-size: 22px; color: var(--ink-2); max-width: 1180px; }
+.hub .stats { display: flex; gap: 40px; flex-wrap: wrap; }
+.hub .st { border-left: 5px solid var(--line); padding-left: 16px; }
+.hub .st .n { font: 800 44px/1 var(--f-display); font-stretch: 78%; font-variant-numeric: tabular-nums; }
+.hub .st .l { font-size: 15.5px; color: var(--ink-2); max-width: 300px; }
+
+/* satellites */
+.sat { padding: 30px 34px; gap: 16px; font-size: 17px; }
+.sat h3 { font-size: 30px; font-weight: 800; font-stretch: 78%; text-transform: uppercase; display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.sat h3 .eyebrow { font-size: 14px; }
+.figgrid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.figgrid .fig .cap { display: none; }
+.figgrid .fig img { aspect-ratio: 16 / 7.5; object-fit: contain; object-position: center; background: #ffffff; padding: 4px; }
+.srcs { margin: 0; padding-left: 22px; font-size: 15px; line-height: 1.55; color: var(--ink-2); columns: 2; column-gap: 32px; }
+.srcs a { color: var(--blue); }
+.keys { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px 22px; font-size: 16px; color: var(--ink-2); }
+kbd { font: 600 14px/1 var(--f-mono); border: 1.5px solid var(--ink-3); border-bottom-width: 3px; border-radius: 5px; padding: 3px 7px; color: var(--ink); background: var(--paper); }
+
+/* process line satellite */
+svg.strip { width: 100%; height: auto; display: block; }
+.strip .pp { stroke: var(--line); stroke-width: 2.4; fill: none; }
+.strip .pp.h2 { stroke: var(--h2); stroke-dasharray: 6 4; stroke-width: 1.8; }
+.strip .pp.s { stroke: var(--sulfur); stroke-dasharray: 2 4; stroke-width: 2; }
+.strip .node { cursor: pointer; }
+.strip .node rect { fill: var(--sheet); stroke: var(--line); stroke-width: 1.8; transition: stroke-width .15s; }
+.strip .node.hot rect { fill: var(--hot-soft); stroke: var(--hot); }
+.strip .node.h2n rect { fill: var(--h2-soft); stroke: var(--h2); }
+.strip .node.sn rect { fill: var(--sulfur-soft); stroke: var(--sulfur); }
+.strip .node.prod rect { fill: var(--blue-soft); stroke: var(--blue); }
+.strip .node text { fill: var(--ink); font: 600 12.5px var(--f-body); text-anchor: middle; pointer-events: none; }
+.strip .node text.tg { font: 500 10px var(--f-mono); fill: var(--ink-3); }
+.strip .node:hover rect, .strip .node.on rect { stroke-width: 3; }
+.strip .node:focus { outline: none; }
+.strip .node:focus-visible rect { stroke: var(--hot); stroke-width: 3.4; }
+.strip .lb { fill: var(--ink-3); font: 10px var(--f-mono); }
+.strip marker path { fill: var(--line); }
+.readout { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 14px; align-items: center; background: var(--paper); border: 1.5px dashed var(--rule); border-radius: 8px; padding: 10px 14px; min-height: 74px; }
+.readout .tgb { font: 600 14px/1 var(--f-mono); border: 2px solid var(--line); border-radius: 4px; padding: 5px 8px; white-space: nowrap; }
+.readout p { font-size: 15.5px; color: var(--ink-2); }
+.readout p b { color: var(--ink); }
+
+/* products tiles */
+.big { font: 850 48px/1 var(--f-display); font-stretch: 72%; font-variant-numeric: tabular-nums; }
+.big small { font: 500 15px/1 var(--f-mono); color: var(--ink-3); margin-left: 6px; }
+
+/* oman cards */
+.rc { padding: 0; overflow: hidden; gap: 0; }
+.rc .rh { background: var(--line); color: var(--sheet); padding: 16px 20px; }
+.rc .rh h3 { color: var(--sheet); font-size: 34px; font-weight: 850; font-stretch: 72%; text-transform: uppercase; }
+.rc .rh p { color: var(--sheet); opacity: .85; font-size: 15.5px; }
+.rc .rb { padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; }
+.rc .cap { font: 850 54px/1 var(--f-display); font-stretch: 70%; font-variant-numeric: tabular-nums; }
+.rc .cap small { font: 500 15px/1 var(--f-mono); color: var(--ink-3); margin-left: 6px; }
+.mbar { height: 12px; border-radius: 0 6px 6px 0; background: var(--bar); }
+.mtrack { border-left: 2px solid var(--ink-3); }
+.rc .k { font-size: 16px; }
+.pill2 { display: inline-block; font: 600 12px/1 var(--f-mono); padding: 4px 9px; border-radius: 999px; border: 1.5px solid currentColor; text-transform: uppercase; letter-spacing: .06em; }
+.pill2.v { color: var(--h2); } .pill2.g { color: var(--sulfur); }
+.tl { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 3px solid var(--line); }
+.tl li { position: relative; padding: 16px 16px 0 0; min-width: 0; }
+.tl li::before { content: ""; position: absolute; top: -10px; left: 0; width: 16px; height: 16px; border-radius: 50%; background: var(--sheet); border: 4px solid var(--hot); }
+.tl .y { font: 850 30px/1 var(--f-display); font-stretch: 72%; display: block; margin-bottom: 4px; }
+.tl p { font-size: 15.5px; color: var(--ink-2); }
+
+/* ---------- pill rail ---------- */
+.rail {
+  position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); z-index: 60;
+  display: flex; align-items: center; gap: 4px; background: var(--rail); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--rule); border-radius: 999px; padding: 6px; box-shadow: 0 10px 30px -14px rgba(0,0,0,.35);
+  max-width: calc(100vw - 24px); overflow-x: auto; scrollbar-width: none;
+}
+.rail::-webkit-scrollbar { display: none; }
+.rail button { appearance: none; border: 1.5px solid transparent; background: transparent; border-radius: 999px; padding: 8px 13px; font: 700 11.5px/1 var(--f-body); letter-spacing: .14em; text-transform: uppercase; color: var(--rail-ink); cursor: pointer; white-space: nowrap; transition: all 250ms var(--ease); }
+.rail button:hover { color: var(--hot); border-color: var(--hot); }
+.rail button.on { background: var(--hot); color: #fff; }
+.rail .sep { width: 1px; align-self: stretch; background: var(--rule); margin: 4px 3px; }
+.rail .nav { font-size: 15px; letter-spacing: 0; padding: 7px 11px; }
+.hint { position: fixed; right: max(18px, env(safe-area-inset-right, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); z-index: 60; font: 500 12px/1.4 var(--f-mono); color: var(--ink-3); background: var(--rail); border: 1px solid var(--rule); border-radius: 8px; padding: 7px 10px; }
+.hint kbd { font-size: 11px; padding: 1px 5px; border-bottom-width: 2px; }
+.brandmark { position: fixed; left: max(18px, env(safe-area-inset-left, 0px)); top: calc(16px + env(safe-area-inset-top, 0px)); z-index: 60; font: 850 18px/1 var(--f-display); font-stretch: 70%; text-transform: uppercase; letter-spacing: .03em; color: var(--ink); background: var(--rail); border: 1px solid var(--rule); border-radius: 8px; padding: 8px 12px; }
+.brandmark span { color: var(--hot); }
+@media (max-width: 1100px) { .hint { display: none; } }
+
+/* ---------- lightbox ---------- */
+.lbx { position: fixed; inset: 0; z-index: 95; background: rgba(8, 14, 20, 0.88); display: grid; grid-template-rows: auto minmax(0, 1fr);
+  padding: max(12px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(12px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+.lbx-bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; color: #e6edf3; padding-bottom: 10px; flex-wrap: wrap; }
+.lbx-bar b { font: 700 18px/1.2 var(--f-display); font-stretch: 80%; }
+.lbx-bar .ctr { display: flex; gap: 6px; }
+.lbx-bar button { font: 600 13px/1 var(--f-mono); color: #e6edf3; background: #1d2c3a; border: 1px solid #3a4f63; border-radius: 5px; padding: 8px 11px; cursor: pointer; }
+.lbx-bar button:hover { background: #2a4057; }
+.lbx-st { overflow: auto; display: flex; align-items: center; justify-content: center; min-height: 0; }
+.lbx-st img { display: block; width: auto; height: auto; max-width: 100%; max-height: calc(100vh - 96px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px)); object-fit: contain; background: #ffffff; border-radius: 6px; box-shadow: 0 20px 60px -20px rgba(0,0,0,.6); }
+.lbx-st.zoom { align-items: flex-start; justify-content: flex-start; }
+.lbx-st.zoom img { max-width: none; max-height: none; width: 1800px; }
+
+/* ---------- flow mode: phones and short screens scroll instead of flying ---------- */
+body.flow { overflow: auto; }
+body.flow .viewport { position: static; overflow: visible; background: var(--paper); }
+body.flow .stage { position: static; width: auto; height: auto; transform: none !important; transition: none; display: flex; flex-direction: column; gap: 18px;
+  padding: calc(64px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) calc(110px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background-size: 24px 24px; }
+body.flow svg.conns, body.flow .panel .go, body.flow .hint { display: none; }
+body.flow .panel { position: static !important; width: auto !important; height: auto !important; cursor: default; font-size: 16px; }
+body.flow .panel.focused { box-shadow: var(--shadow); border-color: var(--rule); }
+body.flow .branch { padding: 22px 18px; gap: 18px; }
+body.flow .bhead { grid-template-columns: auto minmax(0, 1fr); }
+body.flow .bhead .btn { grid-column: 1 / -1; justify-self: start; }
+body.flow .bnum { font-size: 64px; }
+body.flow .bhead h2 { font-size: 32px; }
+body.flow .bhead p.lede { font-size: 16px; }
+body.flow .c2, body.flow .c3, body.flow .c4, body.flow .c64 { grid-template-columns: minmax(0, 1fr); }
+body.flow .hub { padding: 24px 18px; }
+body.flow .hub h1 { font-size: 48px; }
+body.flow .hub .lede { font-size: 16px; }
+body.flow .hub .st .n { font-size: 30px; }
+body.flow .sat { padding: 20px 18px; }
+body.flow .sat h3 { font-size: 22px; }
+body.flow .figgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+body.flow .srcs { columns: 1; }
+body.flow .keys { grid-template-columns: minmax(0, 1fr); }
+body.flow .crow, body.flow .axis { grid-template-columns: 110px minmax(0, 1fr); gap: 10px; }
+body.flow .crow .nm { font-size: 13px; }
+body.flow .tl { grid-template-columns: minmax(0, 1fr); border-top: 0; border-left: 3px solid var(--line); }
+body.flow .tl li { padding: 0 0 14px 18px; }
+body.flow .tl li::before { top: 4px; left: -10px; }
+body.flow .tw { overflow-x: auto; }
+body.flow table { min-width: 560px; font-size: 14px; }
+body.flow .card ul, body.flow .card p, body.flow .k { font-size: 15px; }
+body.flow .io { grid-template-columns: minmax(0, 1fr); }
+body.flow .io .arr { justify-content: center; transform: rotate(90deg); }
+body.flow .strip-wrap { overflow-x: auto; }
+body.flow svg.strip { min-width: 760px; }
+body.flow .rail { bottom: calc(10px + env(safe-area-inset-bottom, 0px)); }
+</style>
+</head>
+<body>
+
+<span class="brandmark" aria-hidden="true">Refinery <span>Roadmap</span></span>
+<div class="hint" aria-hidden="true"><kbd>1</kbd>–<kbd>6</kbd> branches · <kbd>←</kbd><kbd>→</kbd> step · <kbd>0</kbd> hub · <kbd>L</kbd> line · <kbd>F</kbd> figures · <kbd>Esc</kbd> back</div>
+
+<div class="viewport" id="viewport">
+  <div class="stage" id="stage">
+
+    <!-- connectors: process loop 01→02→03→04→05→06 around the hub -->
+    <svg class="conns" viewBox="0 0 4600 3200" aria-hidden="true">
+      <defs><marker id="m" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="4" markerHeight="4" orient="auto"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+      <path class="pipe" d="M1500,720 H1640" marker-end="url(#m)"/>
+      <path class="pipe" d="M2950,720 H3090" marker-end="url(#m)"/>
+      <path class="pipe" d="M4400,900 H4510 V2300 H4410" marker-end="url(#m)"/>
+      <path class="pipe" d="M3100,2520 H2960" marker-end="url(#m)"/>
+      <path class="pipe" d="M1650,2520 H1510" marker-end="url(#m)"/>
+      <path class="flow" d="M1500,720 H1640"/>
+      <path class="flow" d="M2950,720 H3090"/>
+      <path class="flow" d="M4400,900 H4510 V2300 H4410"/>
+      <path class="flow" d="M3100,2520 H2960"/>
+      <path class="flow" d="M1650,2520 H1510"/>
+      <path class="spoke" d="M2300,1360 V1080"/>
+      <path class="spoke" d="M2300,1840 V2120"/>
+      <path class="spoke" d="M1600,1600 H1360"/>
+      <path class="spoke" d="M3000,1600 H3240"/>
+      <text x="4540" y="1600" transform="rotate(90 4540 1600)" text-anchor="middle">PROCESS FLOW</text>
+    </svg>
+
+    <!-- ================= HUB ================= -->
+    <section class="panel hub" id="hub" data-v="hub" style="left:1600px;top:1360px;width:1400px;height:480px" aria-labelledby="h-hub">
+      <div class="tb"><span>Drawing <b>ORR-001 · Rev A</b></span><span>Prepared by <b>Mohamed Al-Hashami</b></span><span><b>15 Oct 2026</b> · Training week 2</span></div>
+      <h1 id="h-hub">Oman Refinery <em>Roadmap</em></h1>
+      <p class="lede">Follow crude oil around the loop, from the receiving tank to the loading bay. Each branch shows what enters a stage, what leaves it, and the specification it must meet.</p>
+      <div class="stats">
+        <div class="st"><div class="n">534,000 b/d</div><div class="l">refining capacity across Oman's three refineries</div></div>
+        <div class="st"><div class="n">54.7 wt%</div><div class="l">of Oman crude boils above 375 °C</div></div>
+        <div class="st"><div class="n">10 ppm</div><div class="l">sulfur limit for Euro 5 gasoline and diesel</div></div>
+      </div>
+    </section>
+
+    <!-- ================= 01 FEED ================= -->
+    <section class="panel branch" id="b01" data-v="01" style="left:200px;top:260px;width:1300px;height:900px" aria-labelledby="h01">
+      <div class="bhead">
+        <div class="bnum">01</div>
+        <div><span class="eyebrow">Stage 0 · Raw material</span><h2 id="h01">Crude feed</h2></div>
+        <button class="btn" data-fig="fig06" type="button">Spec sheet ↗</button>
+        <p class="lede">Crude arrives stabilised from upstream, then is sampled and tested against the purchase contract before it enters any unit.</p>
+      </div>
+      <div class="bbody c64">
+        <div class="card t-line">
+          <h3>One barrel of Oman crude <span class="tag">TBP ASSAY · WT%</span></h3>
+          <div class="chart" id="barrel"></div>
+          <p class="note">TotalEnergies Oman crude assay (2016). Cuts do not overlap and sum to 100%. Hover a bar.</p>
+        </div>
+        <div class="card t-line">
+          <h3>Feed specification <span class="tag">AT RECEIPT</span></h3>
+          <dl class="k">
+            <dt>API</dt><dd class="mono">31.3 °API · 868.7 kg/m³</dd>
+            <dt>Sulfur</dt><dd class="mono">1.41 wt% · sour</dd>
+            <dt>TAN</dt><dd class="mono">0.64 mg KOH/g</dd>
+            <dt>Salt</dt><dd class="mono">59 mg/kg ≈ 18 ptb</dd>
+            <dt>Water</dt><dd class="mono">0.1 vol%</dd>
+            <dt>Pour pt</dt><dd class="mono">−36 °C</dd>
+            <dt>Ni / V</dt><dd class="mono">10.1 / 10.1 mg/kg</dd>
+          </dl>
+          <div class="io">
+            <div><span class="l">Enters</span>Inside contract band; BS&amp;W ≤ 0.5 vol%</div>
+            <div class="arr" aria-hidden="true">→</div>
+            <div class="out"><span class="l">Leaves</span>Metered, sampled, drained, to desalter</div>
+          </div>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- ================= 02 SEPARATE ================= -->
+    <section class="panel branch" id="b02" data-v="02" style="left:1650px;top:180px;width:1300px;height:900px" aria-labelledby="h02">
+      <div class="bhead">
+        <div class="bnum">02</div>
+        <div><span class="eyebrow">Stages 1–3 · Physical separation</span><h2 id="h02">Desalt and distil</h2></div>
+        <button class="btn" data-fig="fig02" type="button">Column diagram ↗</button>
+        <p class="lede">Salt and water come out first. Heat and boiling point then split the crude into cuts, and vacuum recovers the heavy gas oil without cracking it.</p>
+      </div>
+      <div class="bbody c3">
+        <div class="card t-line">
+          <h3>Desalter <span class="tag">V-101</span></h3>
+          <ul>
+            <li>Wash water + <b>demulsifier</b> free the salt.</li>
+            <li>An <b>electric field</b> coalesces droplets.</li>
+            <li>At OXY much of this happens upstream.</li>
+          </ul>
+          <div class="io"><div><span class="l">In</span><span class="mono">≈ 18 ptb</span> salt</div><div class="arr" aria-hidden="true">→</div><div class="out"><span class="l">Out</span><span class="mono">≈ 1 ptb</span>, water ≤ 0.3 vol%</div></div>
+        </div>
+        <div class="card t-hot">
+          <h3>Atmospheric column <span class="tag">C-101</span></h3>
+          <ul>
+            <li>Furnace to <b class="mono">350–370 °C</b>.</li>
+            <li>Trays approach <b>equilibrium</b>; light ends rise.</li>
+            <li>Side draws, steam stripping, pumparounds.</li>
+          </ul>
+          <div class="io"><div><span class="l">In</span>Desalted crude</div><div class="arr" aria-hidden="true">→</div><div class="out"><span class="l">Out</span>Gas, naphtha, kero, gas oil, residue</div></div>
+        </div>
+        <div class="card t-line">
+          <h3>Vacuum column <span class="tag">C-201</span></h3>
+          <ul>
+            <li>Above ~370 °C oil <b>cracks</b> into coke and gums.</li>
+            <li>At <b class="mono">20–50 mmHg</b> boiling points drop.</li>
+            <li>Ejectors hold the vacuum.</li>
+          </ul>
+          <div class="io"><div><span class="l">In</span>Residue <span class="mono">54.7 wt%</span></div><div class="arr" aria-hidden="true">→</div><div class="out"><span class="l">Out</span>VGO <span class="mono">26.4</span> + VR <span class="mono">28.3 wt%</span></div></div>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- ================= 03 CONVERT ================= -->
+    <section class="panel branch" id="b03" data-v="03" style="left:3100px;top:260px;width:1300px;height:900px" aria-labelledby="h03">
+      <div class="bhead">
+        <div class="bnum">03</div>
+        <div><span class="eyebrow">Stage 4 · Where the value is added</span><h2 id="h03">Conversion units</h2></div>
+        <button class="btn" data-fig="fig03" type="button">FCC loop ↗</button>
+        <p class="lede">Distillation only separates. Conversion units change the molecules: heavy ones are cracked into fuels, light ones reshaped into high-octane gasoline.</p>
+      </div>
+      <div class="bbody c3">
+        <div class="card t-hot"><h3>FCC</h3><dl class="k"><dt>Feed</dt><dd>Vacuum gas oil</dd><dt>Cat.</dt><dd>Y zeolite + ZSM-5</dd><dt>At</dt><dd class="mono">500–540 °C, seconds</dd><dt>Makes</dt><dd>Gasoline, LPG, olefins</dd></dl></div>
+        <div class="card t-hot"><h3>Hydrocracker</h3><dl class="k"><dt>Feed</dt><dd>VGO, deasphalted oil</dd><dt>Cat.</dt><dd>Acid + Ni, Mo, W</dd><dt>At</dt><dd class="mono">70–170 bar, 350–450 °C</dd><dt>Makes</dt><dd>Low-S diesel and jet</dd></dl></div>
+        <div class="card t-hot"><h3>Delayed coker</h3><dl class="k"><dt>Feed</dt><dd>Vacuum residue, 3.04 wt% S</dd><dt>Cat.</dt><dd>None, thermal</dd><dt>At</dt><dd class="mono">480–510 °C, hours</dd><dt>Makes</dt><dd>Gas oil, naphtha, coke</dd></dl></div>
+        <div class="card t-hot"><h3>Visbreaker</h3><dl class="k"><dt>Feed</dt><dd>Vacuum residue</dd><dt>Cat.</dt><dd>None, mild thermal</dd><dt>At</dt><dd class="mono">450–500 °C</dd><dt>Makes</dt><dd>Lower-viscosity fuel oil</dd></dl></div>
+        <div class="card t-hot"><h3>Catalytic reformer</h3><dl class="k"><dt>Feed</dt><dd>Hydrotreated naphtha</dd><dt>Cat.</dt><dd>Pt-Re / Pt-Sn</dd><dt>Limit</dt><dd class="mono">S, N &lt; 0.5 ppm in</dd><dt>Makes</dt><dd>Reformate + H₂</dd></dl></div>
+        <div class="card t-hot"><h3>Alky + isom</h3><dl class="k"><dt>Alky</dt><dd>Olefins + isobutane</dd><dt>Cat.</dt><dd>H₂SO₄ or HF</dd><dt>Isom</dt><dd>C5–C6 light naphtha</dd><dt>Makes</dt><dd>High-octane, low-S blendstock</dd></dl></div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- ================= 04 TREAT ================= -->
+    <section class="panel branch" id="b04" data-v="04" style="left:3100px;top:2040px;width:1300px;height:900px" aria-labelledby="h04">
+      <div class="bhead">
+        <div class="bnum">04</div>
+        <div><span class="eyebrow">Stages 5–6 · Clean-up and hydrogen</span><h2 id="h04">Treating and sulfur</h2></div>
+        <button class="btn" data-fig="fig04" type="button">Sulfur path ↗</button>
+        <p class="lede">Hydrotreating turns sulfur into H₂S, the amine unit concentrates it, and the Claus unit converts it into elemental sulfur that is sold.</p>
+      </div>
+      <div class="bbody c2">
+        <div style="display:flex;flex-direction:column;gap:16px;min-width:0">
+          <button class="fig" data-fig="fig04" type="button"><img src="fig04_sulfur_loop.png" alt="Sulfur path diagram" width="2800" height="1600"><span class="cap"><span><b>Sulfur path.</b> Sour feed to ULSD and solid sulfur.</span><span class="o">Open ↗</span></span></button>
+          <div class="card t-h2"><dl class="k"><dt>HDT</dt><dd>CoMo/NiMo · <span class="mono">300–400 °C, 30–100 bar</span></dd><dt>H₂</dt><dd>SMR + PSA, about <span class="mono">99.9 vol%</span></dd><dt>Claus</dt><dd><span class="mono">95–98%</span> recovery, more with a tail gas unit</dd></dl></div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Stream</th><th>Enters with</th><th>Leaves with</th></tr></thead>
+            <tbody>
+              <tr><td>Heavy naphtha</td><td class="mono">0.04 wt% S</td><td>S, N &lt; 0.5 ppm (reformer feed)</td></tr>
+              <tr><td>Kerosene</td><td class="mono">0.11 wt% S</td><td>Jet A-1, S ≤ 0.30 wt%</td></tr>
+              <tr><td>Gas oil</td><td class="mono">0.67 wt% S</td><td>ULSD, S ≤ 10 mg/kg</td></tr>
+              <tr><td>Refinery gas</td><td>H₂S-rich</td><td>Sweet fuel gas (MDEA)</td></tr>
+              <tr><td>Acid gas</td><td>Concentrated H₂S</td><td>Sulfur ≥ 99.9 wt%</td></tr>
+              <tr><td>Sour water</td><td>H₂S + NH₃</td><td>Stripped water, reused</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- ================= 05 PRODUCTS ================= -->
+    <section class="panel branch" id="b05" data-v="05" style="left:1650px;top:2120px;width:1300px;height:900px" aria-labelledby="h05">
+      <div class="bhead">
+        <div class="bnum">05</div>
+        <div><span class="eyebrow">Stage 7 · Blend, test, release</span><h2 id="h05">Products and specs</h2></div>
+        <button class="btn" data-fig="fig07" type="button">Spec table ↗</button>
+        <p class="lede">Streams are blended in calculated ratios and dosed with additives. The lab releases a batch only when it meets its specification.</p>
+      </div>
+      <div class="bbody" style="grid-template-rows:auto minmax(0,1fr)">
+        <div class="c4" style="display:grid;gap:16px">
+          <div class="card t-blue"><span class="eyebrow">Gasoline · EN 228</span><div class="big">M91·95·98</div><p>Euro 5 aligned in Oman since July 2019.</p></div>
+          <div class="card t-blue"><span class="eyebrow">Diesel · EN 590</span><div class="big">10<small>mg/kg S</small></div><p>Cetane ≥ 51; Oman draft spec (2020).</p></div>
+          <div class="card t-blue"><span class="eyebrow">Jet A-1</span><div class="big">−47<small>°C freeze</small></div><p>Flash ≥ 38 °C, S ≤ 0.30 wt%.</p></div>
+          <div class="card t-s"><span class="eyebrow">By-products</span><div class="big">S · coke</div><p>Sulfur ≥ 99.9 wt%; Duqm sells coke.</p></div>
+        </div>
+        <div class="tw">
+          <table>
+            <thead><tr><th>Product</th><th>Standard</th><th>Key limits (typical)</th></tr></thead>
+            <tbody>
+              <tr><td>Gasoline</td><td>EN 228</td><td>RON 91/95/98 · S ≤ 10 mg/kg · benzene ≤ 1.0 vol% · aromatics ≤ 35 vol%</td></tr>
+              <tr><td>Diesel</td><td>EN 590</td><td>Cetane ≥ 51 · S ≤ 10 mg/kg · density 820–845 kg/m³ · flash &gt; 55 °C</td></tr>
+              <tr><td>Jet A-1</td><td>DEF STAN 91-091</td><td>Flash ≥ 38 °C · freeze ≤ −47 °C · aromatics ≤ 25 vol%</td></tr>
+              <tr><td>LPG</td><td>EN 589</td><td>Vapour pressure by grade · total S ≤ 50 mg/kg</td></tr>
+              <tr><td>Fuel oil</td><td>ISO 8217</td><td>S ≤ 0.50 wt% (IMO 2020) · RMG 380 ≤ 380 mm²/s</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- ================= 06 OMAN ================= -->
+    <section class="panel branch" id="b06" data-v="06" style="left:200px;top:2040px;width:1300px;height:900px" aria-labelledby="h06">
+      <div class="bhead">
+        <div class="bnum">06</div>
+        <div><span class="eyebrow">Focus · Sultanate of Oman</span><h2 id="h06">Refineries in Oman</h2></div>
+        <button class="btn" data-fig="fig09" type="button">Profiles ↗</button>
+        <p class="lede">About 534,000 b/d of nameplate capacity. OQ runs Mina Al Fahal and Sohar and co-owns Duqm with Kuwait Petroleum International.</p>
+      </div>
+      <div class="bbody" style="grid-template-rows:minmax(0,1fr) auto">
+        <div class="c3" style="display:grid;gap:16px" id="refcards"></div>
+        <ol class="tl">
+          <li><span class="y">2007</span><p>Sohar at full production, 116,400 b/d.</p></li>
+          <li><span class="y">2017</span><p>Mina Al Fahal 45-day turnaround.</p></li>
+          <li><span class="y">2019</span><p>SRIP done: Sohar 198,000 b/d. Euro 5 gasoline.</p></li>
+          <li><span class="y">2023</span><p>Duqm crude unit trials (April).</p></li>
+          <li><span class="y">2024</span><p>Duqm fully operational (Feb).</p></li>
+        </ol>
+      </div>
+      <span class="go" aria-hidden="true">Open ›</span>
+    </section>
+
+    <!-- ================= SATELLITES ================= -->
+    <section class="panel sat" id="sline" data-v="line" style="left:520px;top:1180px;width:840px;height:470px" aria-labelledby="h-line">
+      <h3 id="h-line">Process line <span class="eyebrow">Hover · click to fly</span></h3>
+      <div class="strip-wrap">
+        <svg class="strip" viewBox="0 0 1160 300" role="img" aria-label="Refinery process line from crude tanks to products">
+          <defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z"/></marker></defs>
+          <path class="pp" d="M110,160 H128" marker-end="url(#ah)"/><path class="pp" d="M226,160 H264" marker-end="url(#ah)"/><path class="pp" d="M362,160 H380" marker-end="url(#ah)"/>
+          <path class="pp" d="M430,196 V238 H380" marker-end="url(#ah)"/><path class="pp" d="M478,160 H514" marker-end="url(#ah)"/><path class="pp" d="M322,262 H500 V196 H514" marker-end="url(#ah)"/>
+          <path class="pp" d="M612,160 H650" marker-end="url(#ah)"/><path class="pp" d="M748,160 H876" marker-end="url(#ah)"/><path class="pp" d="M974,160 H1010" marker-end="url(#ah)"/>
+          <path class="pp h2" d="M699,92 V122"/><path class="pp s" d="M748,186 H800 V262 H1010"/>
+          <text class="lb" x="440" y="222">atm. residue</text><text class="lb" x="806" y="152">treated</text><text class="lb" x="812" y="254">H₂S → sulfur</text>
+          <g class="node" tabindex="0" role="button" data-i="0" data-b="01"><rect x="14" y="132" width="96" height="56" rx="6"/><text x="62" y="156">Crude tanks</text><text class="tg" x="62" y="174">TK-101</text></g>
+          <g class="node" tabindex="0" role="button" data-i="1" data-b="02"><rect x="130" y="132" width="96" height="56" rx="6"/><text x="178" y="156">Desalter</text><text class="tg" x="178" y="174">V-101</text></g>
+          <g class="node hot" tabindex="0" role="button" data-i="2" data-b="02"><rect x="266" y="132" width="96" height="56" rx="6"/><text x="314" y="156">Furnace</text><text class="tg" x="314" y="174">H-101</text></g>
+          <g class="node" tabindex="0" role="button" data-i="3" data-b="02"><rect x="382" y="124" width="96" height="72" rx="6"/><text x="430" y="156">Atmospheric</text><text x="430" y="171">column</text><text class="tg" x="430" y="187">C-101</text></g>
+          <g class="node" tabindex="0" role="button" data-i="4" data-b="02"><rect x="226" y="236" width="96" height="52" rx="6"/><text x="274" y="258">Vacuum col.</text><text class="tg" x="274" y="276">C-201</text></g>
+          <g class="node hot" tabindex="0" role="button" data-i="5" data-b="03"><rect x="516" y="124" width="96" height="88" rx="6"/><text x="564" y="152">Conversion</text><text x="564" y="167">FCC · HCU</text><text x="564" y="182">coker · CCR</text><text class="tg" x="564" y="200">R-301…</text></g>
+          <g class="node h2n" tabindex="0" role="button" data-i="6" data-b="04"><rect x="652" y="40" width="96" height="52" rx="6"/><text x="700" y="62">H₂ plant</text><text class="tg" x="700" y="80">SMR + PSA</text></g>
+          <g class="node" tabindex="0" role="button" data-i="7" data-b="04"><rect x="652" y="124" width="96" height="72" rx="6"/><text x="700" y="152">Treating</text><text x="700" y="167">HDT · amine</text><text class="tg" x="700" y="185">R-401…</text></g>
+          <g class="node sn" tabindex="0" role="button" data-i="8" data-b="04"><rect x="1012" y="238" width="132" height="46" rx="6"/><text x="1078" y="258">Sulfur (Claus)</text><text class="tg" x="1078" y="274">SRU-601</text></g>
+          <g class="node" tabindex="0" role="button" data-i="9" data-b="05"><rect x="878" y="124" width="96" height="72" rx="6"/><text x="926" y="152">Blending</text><text x="926" y="167">+ lab</text><text class="tg" x="926" y="185">TK-501…</text></g>
+          <g class="node prod" tabindex="0" role="button" data-i="10" data-b="05"><rect x="1012" y="110" width="132" height="100" rx="6"/><text x="1078" y="136">Products</text><text x="1078" y="154">LPG · M91/95/98</text><text x="1078" y="170">Jet A-1 · Diesel</text><text x="1078" y="186">Fuel oil · Coke</text></g>
+          <g class="node prod" tabindex="0" role="button" data-i="11" data-b="06"><rect x="878" y="40" width="266" height="52" rx="6"/><text x="1011" y="62">Refineries in Oman</text><text class="tg" x="1011" y="80">Mina Al Fahal · Sohar · Duqm</text></g>
+        </svg>
+      </div>
+      <div class="readout" aria-live="polite"><span class="tgb" id="ro-tag">START</span><p id="ro-text"><b>Pick a station.</b> Hover a box to read what happens there; click it to fly to its branch.</p></div>
+    </section>
+
+    <section class="panel sat" id="sabout" data-v="about" style="left:520px;top:1690px;width:840px;height:330px" aria-labelledby="h-about">
+      <h3 id="h-about">How to present <span class="eyebrow">Keys</span></h3>
+      <div class="keys">
+        <span><kbd>1</kbd>–<kbd>6</kbd> open a branch</span>
+        <span><kbd>→</kbd> <kbd>Space</kbd> next stage</span>
+        <span><kbd>←</kbd> previous stage</span>
+        <span><kbd>0</kbd> or <kbd>Esc</kbd> back to hub</span>
+        <span><kbd>L</kbd> process line</span>
+        <span><kbd>F</kbd> figures · <kbd>S</kbd> sources</span>
+      </div>
+      <p style="font-size:15.5px;color:var(--ink-2)">Click any panel to fly to it. Buttons marked ↗ open a figure full size.</p>
+    </section>
+
+    <section class="panel sat" id="sfigs" data-v="figs" style="left:3240px;top:1180px;width:840px;height:520px" aria-labelledby="h-figs">
+      <h3 id="h-figs">Figure set <span class="eyebrow">9 · report-ready PNG</span></h3>
+      <div class="figgrid" id="figgrid"></div>
+    </section>
+
+    <section class="panel sat" id="ssrc" data-v="src" style="left:3240px;top:1730px;width:840px;height:290px" aria-labelledby="h-src">
+      <h3 id="h-src">Sources <span class="eyebrow">Verified vs typical</span></h3>
+      <ol class="srcs">
+        <li><a href="https://ts.totalenergies.com/wp-content/uploads/2020/03/OMAN.pdf" target="_blank" rel="noopener">TotalEnergies Oman assay</a></li>
+        <li><a href="https://oq.com/en/our-business/our-products/refined-products" target="_blank" rel="noopener">OQ refined products</a></li>
+        <li><a href="https://www.ogj.com/refining-processing/article/17289519/orpics-mina-al-fahal-refinery-enters-turnaround" target="_blank" rel="noopener">OGJ: Mina Al Fahal</a></li>
+        <li><a href="https://www.ogj.com/refining-processing/refining/operations/article/17245109/orpic-completes-installation-of-omans-first-hydrocracker" target="_blank" rel="noopener">OGJ: ORPIC hydrocracker</a></li>
+        <li><a href="https://inzonex.co.uk/industryatlas/uk/plant/orpic-sohar-refinery.html" target="_blank" rel="noopener">Climate TRACE / Inzonex</a></li>
+        <li><a href="https://portfolio-pplus.com/SiteMains/Details/396" target="_blank" rel="noopener">P+ Sohar refinery</a></li>
+        <li><a href="https://theenergyyear.com/news/oman-and-kuwait-inaugurate-the-duqm-refinery/" target="_blank" rel="noopener">The Energy Year: Duqm</a></li>
+        <li><a href="https://www.spglobal.com/energy/en/news-research/latest-news/crude-oil/021424-interview-omans-duqm-refinery-plans-to-exceed-capacity-mulls-upgrading-naphtha-product" target="_blank" rel="noopener">S&amp;P Global: Duqm</a></li>
+        <li><a href="https://www.omanobserver.om/article/28566/Head%20stories/new-oman-fuel-standards-from-july-21" target="_blank" rel="noopener">Oman Observer: fuel standards</a></li>
+        <li><a href="https://gulfnews.com/world/gulf/oman/oman-launches--m-98-grade-fuel-1.2159052" target="_blank" rel="noopener">Gulf News: M98</a></li>
+      </ol>
+      <p style="font-size:14px;color:var(--ink-3)">Temperatures, pressures and spec limits are typical industry values, not design data for a specific Omani unit.</p>
+    </section>
+
+  </div>
+</div>
+
+<nav class="rail" aria-label="Views">
+  <button type="button" class="nav" id="prev" aria-label="Previous stage">‹</button>
+  <button type="button" data-go="hub">Hub</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-go="01">01 Feed</button>
+  <button type="button" data-go="02">02 Separate</button>
+  <button type="button" data-go="03">03 Convert</button>
+  <button type="button" data-go="04">04 Treat</button>
+  <button type="button" data-go="05">05 Products</button>
+  <button type="button" data-go="06">06 Oman</button>
+  <span class="sep" aria-hidden="true"></span>
+  <button type="button" data-go="line">Line</button>
+  <button type="button" data-go="figs">Figures</button>
+  <button type="button" data-go="src">Sources</button>
+  <button type="button" class="nav" id="next" aria-label="Next stage">›</button>
+</nav>
+
+<div class="lbx" id="lbx" hidden role="dialog" aria-modal="true" aria-labelledby="lbx-t">
+  <div class="lbx-bar"><b id="lbx-t">Figure</b>
+    <div class="ctr"><button type="button" id="lbx-prev">‹ Prev</button><button type="button" id="lbx-next">Next ›</button><button type="button" id="lbx-zoom">Zoom</button><button type="button" id="lbx-close">Close ✕</button></div>
+  </div>
+  <div class="lbx-st" id="lbx-st"><img id="lbx-img" alt=""></div>
+</div>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+  var FIGS = [
+    { id: "fig01", file: "fig01_refinery_roadmap.png", t: "Refinery block flow diagram" },
+    { id: "fig02", file: "fig02_atmospheric_column.png", t: "Atmospheric column, Oman cut yields" },
+    { id: "fig03", file: "fig03_fcc_loop.png", t: "FCC riser-regenerator loop" },
+    { id: "fig04", file: "fig04_sulfur_loop.png", t: "Sulfur path" },
+    { id: "fig05", file: "fig05_oman_crude_barrel.png", t: "Oman crude barrel" },
+    { id: "fig06", file: "fig06_crude_feed_spec.png", t: "Crude feed specification" },
+    { id: "fig07", file: "fig07_product_specs.png", t: "Product specifications" },
+    { id: "fig08", file: "fig08_oman_refinery_capacity.png", t: "Oman refinery capacity" },
+    { id: "fig09", file: "fig09_oman_refineries.png", t: "Refineries in Oman" }
+  ];
+  var CUTS = [
+    { n: "Gas + LPG", r: "<15 °C", v: 1.12, s: "—", d: "—", to: "Gas plant, LPG" },
+    { n: "Light naphtha", r: "15–80 °C", v: 4.3, s: "0.02", d: "655", to: "Isomerisation" },
+    { n: "Heavy naphtha", r: "80–150 °C", v: 8.7, s: "0.04", d: "732", to: "HDT → reformer" },
+    { n: "Kerosene", r: "150–230 °C", v: 10.1, s: "0.11", d: "785", to: "Jet A-1" },
+    { n: "Gas oil", r: "230–375 °C", v: 21.1, s: "0.67", d: "850", to: "Diesel HDT" },
+    { n: "Vacuum gas oil", r: "375–565 °C", v: 26.4, s: "1.49", d: "914", to: "FCC / hydrocracker" },
+    { n: "Vacuum residue", r: ">565 °C", v: 28.3, s: "3.04", d: "995", to: "Coker / fuel oil" }
+  ];
+  var REFS = [
+    { n: "Mina Al Fahal", loc: "Muscat · OQ", v: 106, rows: [["Turnaround", "Every ~4 yrs; 45 days in 2017"], ["Link", "Pipeline to Sohar; residue feeds Sohar"], ["Units", "Not published"]], gap: true },
+    { n: "Sohar", loc: "Sohar Industrial Port · OQ", v: 198, rows: [["History", "116,400 b/d (2007); SRIP 2019"], ["Units", "RFCC, hydrocracker, coker, SDA, alky"], ["Products", "Fuels + propylene"]] },
+    { n: "Duqm", loc: "Duqm SEZ · OQ + KPI 50:50", v: 230, rows: [["Online", "Trials 2023; full Feb 2024"], ["Feed", "Kuwait Export + Oman Export Blend"], ["Units", "CDU, hydrocracker, coker"]] }
+  ];
+  var STATIONS = [
+    ["TK-101", "<b>Crude tanks.</b> Crude arrives and is tested: Oman crude is 31.3 °API with 1.41 wt% sulfur."],
+    ["V-101", "<b>Desalter.</b> Cuts salt from about 18 ptb to about 1 ptb so the furnace and column do not corrode."],
+    ["H-101", "<b>Furnace.</b> Takes crude to 350–370 °C; any hotter and it starts to crack."],
+    ["C-101", "<b>Atmospheric column.</b> Splits crude by boiling range; 54.7 wt% leaves as residue above 375 °C."],
+    ["C-201", "<b>Vacuum column.</b> At 20–50 mmHg recovers 26.4 wt% VGO; 28.3 wt% stays as vacuum residue."],
+    ["R-301", "<b>Conversion.</b> FCC, hydrocracker, coker, reformer, alkylation and isomerisation upgrade the barrel."],
+    ["SMR", "<b>Hydrogen plant.</b> Supplies H₂ at about 99.9 vol% to hydrotreaters and the hydrocracker."],
+    ["R-401", "<b>Treating.</b> Gas oil goes from 0.67 wt% sulfur to 10 mg/kg; amine collects the H₂S."],
+    ["SRU-601", "<b>Claus unit.</b> Converts H₂S to elemental sulfur at 95–98% recovery."],
+    ["TK-501", "<b>Blending and lab.</b> Batches are blended to spec and certified before release."],
+    ["PRODUCTS", "<b>Products.</b> LPG, M91/M95/M98, Jet A-1, 10 ppm diesel, fuel oil, coke and sulfur."],
+    ["OMAN", "<b>Refineries in Oman.</b> Mina Al Fahal 106k, Sohar 198k, Duqm 230k b/d."]
+  ];
+  var SEQ = ["--seq1", "--seq2", "--seq3", "--seq4", "--seq5", "--seq6", "--seq7"];
+
+  /* tooltip */
+  var tip = document.getElementById("tip");
+  function showTip(h, x, y) { tip.innerHTML = h; tip.hidden = false; var r = tip.getBoundingClientRect(); var nx = Math.min(x + 14, innerWidth - r.width - 8); var ny = y - r.height - 12; if (ny < 8) ny = y + 18; tip.style.left = Math.max(8, nx) + "px"; tip.style.top = ny + "px"; }
+  function hideTip() { tip.hidden = true; }
+  function rows(a) { return a.map(function (r) { return '<div class="r"><span>' + r[0] + "</span><span>" + r[1] + "</span></div>"; }).join(""); }
+
+  /* barrel chart */
+  (function () {
+    var el = document.getElementById("barrel"), max = 30, h = "";
+    CUTS.forEach(function (c, i) {
+      var p = c.v / max * 100;
+      h += '<div class="crow"><div class="nm">' + c.n + "<small>" + c.r + '</small></div><div class="tr"><div class="bar" tabindex="0" data-i="' + i + '" style="width:' + p.toFixed(2) + "%;background:var(" + SEQ[i] + ')" aria-label="' + c.n + " " + c.v.toFixed(1) + ' wt%"></div><span class="v" style="left:' + p.toFixed(2) + '%">' + c.v.toFixed(1) + "%</span></div></div>";
+    });
+    h += '<div class="axis"><span></span><div class="ticks">' + [0, 10, 20, 30].map(function (t) { return '<span style="left:' + (t / max * 100) + '%">' + t + "</span>"; }).join("") + "</div></div>";
+    el.innerHTML = h;
+    el.querySelectorAll(".bar").forEach(function (b) {
+      var c = CUTS[+b.dataset.i], html = "<b>" + c.n + " · " + c.r + "</b>" + rows([["Yield", c.v.toFixed(1) + " wt%"], ["Sulfur", c.s + " wt%"], ["Density", c.d + " kg/m³"], ["Goes to", c.to]]);
+      b.addEventListener("pointermove", function (e) { showTip(html, e.clientX, e.clientY); });
+      b.addEventListener("pointerleave", hideTip);
+      b.addEventListener("focus", function () { var r = b.getBoundingClientRect(); showTip(html, r.right, r.top); });
+      b.addEventListener("blur", hideTip);
+    });
+  })();
+
+  /* refinery cards */
+  document.getElementById("refcards").innerHTML = REFS.map(function (r) {
+    return '<div class="card rc"><div class="rh"><h3>' + r.n + "</h3><p>" + r.loc + '</p></div><div class="rb"><div class="cap">' + r.v + ",000<small>b/d</small></div>" +
+      '<div class="mtrack"><div class="mbar" style="width:' + (r.v / 230 * 100).toFixed(1) + '%"></div></div><dl class="k">' +
+      r.rows.map(function (x) { return "<dt>" + x[0] + "</dt><dd>" + x[1] + "</dd>"; }).join("") + "</dl>" +
+      '<span><span class="pill2 v">verified</span>' + (r.gap ? ' <span class="pill2 g">gap: units</span>' : "") + "</span></div></div>";
+  }).join("");
+
+  /* figure grid */
+  document.getElementById("figgrid").innerHTML = FIGS.map(function (f) {
+    return '<button class="fig" type="button" data-fig="' + f.id + '"><img src="' + f.file + '" alt="' + f.t + '" title="' + f.t + '" loading="lazy"><span class="cap"><span>' + f.t + '</span><span class="o">↗</span></span></button>';
+  }).join("");
+
+  /* camera */
+  var body = document.body, stage = document.getElementById("stage");
+  var VIEWS = {
+    hub: null,
+    "01": { x: 200, y: 260, w: 1300, h: 900 }, "02": { x: 1650, y: 180, w: 1300, h: 900 }, "03": { x: 3100, y: 260, w: 1300, h: 900 },
+    "04": { x: 3100, y: 2040, w: 1300, h: 900 }, "05": { x: 1650, y: 2120, w: 1300, h: 900 }, "06": { x: 200, y: 2040, w: 1300, h: 900 },
+    line: { x: 520, y: 1180, w: 840, h: 470, pad: 260 }, about: { x: 520, y: 1690, w: 840, h: 330, pad: 300 },
+    figs: { x: 3240, y: 1180, w: 840, h: 520, pad: 240 }, src: { x: 3240, y: 1730, w: 840, h: 290, pad: 300 }
+  };
+  var ORDER = ["hub", "01", "02", "03", "04", "05", "06"];
+  var panels = Array.prototype.slice.call(document.querySelectorAll(".panel[data-v]"));
+  var pills = Array.prototype.slice.call(document.querySelectorAll(".rail [data-go]"));
+  var current = "hub";
+  function isFlow() { return innerWidth < 820 || innerHeight < 520; }
+
+  function apply() {
+    var flow = isFlow();
+    body.classList.toggle("flow", flow);
+    if (flow) { stage.style.transform = ""; return; }
+    var RAIL = 96, TOP = 56, s, cx, cy;
+    if (current === "hub") {
+      s = Math.min(innerWidth / 4780, (innerHeight - RAIL - TOP) / 3260);
+      cx = 2300; cy = 1600;
+    } else {
+      var v = VIEWS[current], pad = v.pad || 180;
+      s = Math.min(innerWidth / (v.w + pad), Math.max(innerHeight - RAIL - TOP, 240) / (v.h + pad * 0.55));
+      cx = v.x + v.w / 2; cy = v.y + v.h / 2;
+    }
+    var x = innerWidth / 2 - cx * s, y = (innerHeight - RAIL + TOP) / 2 - cy * s;
+    stage.style.transform = "translate(" + x + "px," + y + "px) scale(" + s + ")";
+  }
+  function setView(t, fromHash) {
+    if (!(t in VIEWS)) return;
+    current = t; hideTip();
+    panels.forEach(function (p) { p.classList.toggle("focused", p.dataset.v === t && t !== "hub"); });
+    pills.forEach(function (p) { p.classList.toggle("on", p.dataset.go === t); });
+    if (isFlow()) {
+      var el = t === "hub" ? document.getElementById("hub") : panels.filter(function (p) { return p.dataset.v === t; })[0];
+      if (el && !fromHash) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    apply();
+    try { history.replaceState(null, "", t === "hub" ? location.pathname + location.search : "#v" + t); } catch (e) {}
+  }
+  function step(d) {
+    var i = ORDER.indexOf(current);
+    if (i < 0) i = 0;
+    setView(ORDER[(i + d + ORDER.length) % ORDER.length]);
+  }
+
+  panels.forEach(function (p) {
+    p.addEventListener("click", function (e) {
+      if (isFlow() || p.classList.contains("focused")) return;
+      if (e.target.closest("a, .btn, .fig, .node, .bar")) return;
+      setView(p.dataset.v);
+    });
+  });
+  document.getElementById("viewport").addEventListener("click", function (e) {
+    if (!isFlow() && (e.target.id === "stage" || e.target.id === "viewport" || e.target.closest("svg.conns"))) setView("hub");
+  });
+  pills.forEach(function (p) { p.addEventListener("click", function () { setView(p.dataset.go); }); });
+  document.getElementById("prev").addEventListener("click", function () { step(-1); });
+  document.getElementById("next").addEventListener("click", function () { step(1); });
+
+  /* process line satellite */
+  var roTag = document.getElementById("ro-tag"), roText = document.getElementById("ro-text");
+  var nodes = document.querySelectorAll(".strip .node");
+  nodes.forEach(function (n) {
+    var i = +n.dataset.i;
+    function show() { roTag.textContent = STATIONS[i][0]; roText.innerHTML = STATIONS[i][1]; nodes.forEach(function (m) { m.classList.toggle("on", m === n); }); }
+    n.addEventListener("pointerenter", show); n.addEventListener("focus", show);
+    function go(e) { e.stopPropagation(); setView(n.dataset.b); }
+    n.addEventListener("click", go);
+    n.addEventListener("keydown", function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(e); } });
+  });
+
+  /* lightbox */
+  var lbx = document.getElementById("lbx"), img = document.getElementById("lbx-img"), ttl = document.getElementById("lbx-t"), st = document.getElementById("lbx-st"), zb = document.getElementById("lbx-zoom");
+  var fi = 0, last = null;
+  function render() { var f = FIGS[fi]; img.src = f.file; img.alt = f.t; ttl.textContent = f.id.replace("fig", "Fig. ") + " · " + f.t; st.classList.remove("zoom"); zb.textContent = "Zoom"; }
+  function openFig(id) { var i = FIGS.findIndex(function (f) { return f.id === id; }); if (i < 0) return; fi = i; last = document.activeElement; render(); lbx.hidden = false; hideTip(); document.getElementById("lbx-close").focus(); }
+  function closeFig() { lbx.hidden = true; if (last && last.focus) last.focus({ preventScroll: true }); }
+  document.addEventListener("click", function (e) { var b = e.target.closest("[data-fig]"); if (b) { e.preventDefault(); e.stopPropagation(); openFig(b.dataset.fig); } }, true);
+  document.getElementById("lbx-close").addEventListener("click", closeFig);
+  document.getElementById("lbx-prev").addEventListener("click", function () { fi = (fi + FIGS.length - 1) % FIGS.length; render(); });
+  document.getElementById("lbx-next").addEventListener("click", function () { fi = (fi + 1) % FIGS.length; render(); });
+  zb.addEventListener("click", function () { var z = st.classList.toggle("zoom"); zb.textContent = z ? "Fit" : "Zoom"; });
+  lbx.addEventListener("click", function (e) { if (e.target === lbx || e.target === st) closeFig(); });
+
+  /* keyboard */
+  addEventListener("keydown", function (e) {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    if (!lbx.hidden) {
+      if (e.key === "Escape") { e.preventDefault(); closeFig(); }
+      else if (e.key === "ArrowRight") document.getElementById("lbx-next").click();
+      else if (e.key === "ArrowLeft") document.getElementById("lbx-prev").click();
+      return;
+    }
+    var k = e.key.toLowerCase();
+    if (/^[1-6]$/.test(k)) setView("0" + k);
+    else if (k === "0" || k === "h" || k === "escape") setView("hub");
+    else if (k === "l") setView("line");
+    else if (k === "f") setView("figs");
+    else if (k === "s") setView("src");
+    else if (k === "i") setView("about");
+    else if (k === "arrowright" || k === "pagedown" || (k === " " && !e.target.closest("button, a, [role=button]"))) { e.preventDefault(); step(1); }
+    else if (k === "arrowleft" || k === "pageup") { e.preventDefault(); step(-1); }
+  });
+
+  addEventListener("resize", apply);
+  var h = (location.hash || "").replace("#v", "");
+  setView(h in VIEWS ? h : "hub", true);
+})();
+</script>
+
+</body>
+</html>
